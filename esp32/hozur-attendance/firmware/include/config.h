@@ -27,7 +27,9 @@ static const int PIN_MODE_BTN  = 32;
 // Optional DS3231 (SCL moved off GPIO22 which is RC522 RST)
 static const int PIN_RTC_SDA = 21;
 static const int PIN_RTC_SCL = 26;
-static const bool ENABLE_DS3231 = false;
+#ifndef ENABLE_DS3231
+#define ENABLE_DS3231 0
+#endif
 
 // Card memory layout
 static const uint8_t CARD_SECTOR       = 1;

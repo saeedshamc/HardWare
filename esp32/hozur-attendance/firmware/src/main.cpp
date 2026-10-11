@@ -1,12 +1,17 @@
 /**
  * Hozur Attendance — ESP32 smart reader
- * Phase 1: RFID read, diversified keys, enrollment, watchdog, cooldown.
+ * Phase 2: TFT UI, buzzer patterns, NTP/RTC clock on idle screen.
  */
 #include <Arduino.h>
 
 #include "config.h"
 #include "rfid/rfid_reader.h"
 #include "storage/secrets_store.h"
+#include "display/tft_display.h"
+#include "ui/ui_screens.h"
+#include "ui/buzzer.h"
+#include "net/wifi_manager.h"
+#include "net/time_service.h"
 
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -21,10 +26,18 @@
 #endif
 
 static RfidReader gRfid;
+static TftDisplay gTft;
+static UiScreens gUi(gTft);
+static Buzzer gBuzzer;
+static WifiManager gWifi;
+static TimeService gTime;
+
 static bool gEnrollMode = false;
 static uint32_t gEnrollUserId = 0;
 static uint32_t gLastUidHash = 0;
 static uint32_t gLastScanMs = 0;
+static bool gNtpStarted = false;
+static bool gServerOnline = true;  // net phase will update this
 
 static uint32_t hashUid(const uint8_t* uid, uint8_t len) {
   uint32_t h = 2166136261u;
@@ -69,20 +82,15 @@ static void handleSerial() {
   Serial.println(F("Unknown command. Type HELP"));
 }
 
-static bool modeButtonHeld() {
-  // Active low with pull-up; hold > 2s enters enroll of user 0 placeholder → serial preferred
-  static uint32_t pressedSince = 0;
-  if (digitalRead(PIN_MODE_BTN) == LOW) {
-    if (pressedSince == 0) {
-      pressedSince = millis();
-    } else if (millis() - pressedSince > 3000 && !gEnrollMode) {
-      Serial.println(F("Mode button held — send: ENROLL <user_id>"));
-      pressedSince = millis();  // debounce message
-    }
-    return true;
+static void refreshIdleUi() {
+  if (gUi.isShowingResult()) {
+    return;
   }
-  pressedSince = 0;
-  return false;
+  char clock[16];
+  char date[16];
+  gTime.formatClock(clock, sizeof(clock));
+  gTime.formatDate(date, sizeof(date));
+  gUi.showIdle(clock, date, gServerOnline, gWifi.isConnected());
 }
 
 void setup() {
@@ -92,69 +100,110 @@ void setup() {
   Serial.println(F("=== Hozur Attendance (ESP32) ==="));
   Serial.printf("Reader ID: %d\n", READER_ID);
   Serial.printf("Server: %s\n", SERVER_BASE_URL);
-  Serial.printf("ENROLL_DRY_RUN=%d\n", ENROLL_DRY_RUN);
 
   pinMode(PIN_STATUS_LED, OUTPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_MODE_BTN, INPUT_PULLUP);
   digitalWrite(PIN_STATUS_LED, LOW);
-  digitalWrite(PIN_BUZZER, LOW);
+
+  gBuzzer.begin(PIN_BUZZER);
+  gTime.begin();
+
+  gTft.begin();
+  gUi.showIdle("--:--:--", "----/--/--", false, false);
 
   uint8_t master[64];
   size_t masterLen = 0;
   if (!secrets_load_master_key(master, sizeof(master), &masterLen)) {
     Serial.println(F("FATAL: cannot load MASTER_KEY"));
+    gUi.showDenied("No MASTER_KEY");
   } else {
-    Serial.printf("MASTER_KEY loaded (%u bytes) from NVS or secrets.h\n",
-                  (unsigned)masterLen);
+    Serial.printf("MASTER_KEY loaded (%u bytes)\n", (unsigned)masterLen);
   }
 
   gRfid.begin();
   gRfid.setMasterKey(master, masterLen);
 
-  // Loop task watchdog — device resets if loop stalls too long
+  gWifi.begin(WIFI_SSID, WIFI_PASSWORD);
   enableLoopWDT();
 
   Serial.println(F("Ready. Commands: HELP | ENROLL <user_id>"));
 }
 
 void loop() {
+  const uint32_t now = millis();
   handleSerial();
-  modeButtonHeld();
+  gWifi.update();
+  gBuzzer.update(now);
+  gTime.update();
+
+  if (gWifi.isConnected() && !gNtpStarted) {
+    gTime.startNtp();
+    gNtpStarted = true;
+  }
+
+  if (!gUi.update(now)) {
+    // returned to idle capability
+  }
+  static uint32_t lastIdleMs = 0;
+  if (!gUi.isShowingResult() && now - lastIdleMs > 500) {
+    lastIdleMs = now;
+    refreshIdleUi();
+  }
 
   if (gEnrollMode) {
     RfidScanResult res;
     if (gRfid.enroll(gEnrollUserId, &res)) {
       Serial.printf("ENROLL_OK uid=%s user_id=%lu\n", res.uidHex,
                     (unsigned long)res.user_id);
-      // Server notify is wired in the net phase.
       gEnrollMode = false;
-      digitalWrite(PIN_STATUS_LED, HIGH);
-      delay(100);
-      digitalWrite(PIN_STATUS_LED, LOW);
+      gBuzzer.play(BuzzPattern::Enroll);
+      ScanUiData ui{};
+      ui.nameLatin = "ENROLLED";
+      ui.department = res.uidHex;
+      ui.direction = "in";
+      char tbuf[16];
+      gTime.formatClock(tbuf, sizeof(tbuf));
+      ui.timeStr = tbuf;
+      gUi.showSuccess(ui);
     }
-    delay(50);
+    return;
+  }
+
+  if (gUi.isShowingResult()) {
     return;
   }
 
   RfidScanResult scan;
   if (!gRfid.pollScan(&scan)) {
-    delay(20);
     return;
   }
 
   const uint32_t h = hashUid(scan.uid, scan.uidLen);
-  if (h == gLastUidHash && (millis() - gLastScanMs) < CARD_COOLDOWN_MS) {
+  if (h == gLastUidHash && (now - gLastScanMs) < CARD_COOLDOWN_MS) {
     Serial.println(F("Cooldown — ignoring same card"));
+    gBuzzer.play(BuzzPattern::Denied);
+    gUi.showDuplicate(ScanUiData{});
     return;
   }
   gLastUidHash = h;
-  gLastScanMs = millis();
+  gLastScanMs = now;
 
   Serial.printf("SCAN uid=%s user_id=%lu counter=%lu\n", scan.uidHex,
                 (unsigned long)scan.user_id, (unsigned long)scan.counter);
-  // POST /api/scan/ added in net phase.
-  digitalWrite(PIN_BUZZER, HIGH);
-  delay(40);
-  digitalWrite(PIN_BUZZER, LOW);
+
+  // Local preview until net phase posts to server
+  ScanUiData ui{};
+  static char nameBuf[32];
+  snprintf(nameBuf, sizeof(nameBuf), "User %lu", (unsigned long)scan.user_id);
+  ui.nameLatin = nameBuf;
+  ui.department = "local";
+  ui.direction = "in";
+  char tbuf[16];
+  char dbuf[16];
+  gTime.formatClock(tbuf, sizeof(tbuf));
+  gTime.formatDate(dbuf, sizeof(dbuf));
+  ui.timeStr = tbuf;
+  ui.dateJalali = dbuf;
+  gBuzzer.play(BuzzPattern::Ok);
+  gUi.showSuccess(ui);
 }
