@@ -1,1 +1,3 @@
-# Report admin views are registered in phase 5.
+from django.contrib import admin
+
+admin.site.index_title = "داشبورد حضور و غیاب — گزارش: /admin/reports/daily/"

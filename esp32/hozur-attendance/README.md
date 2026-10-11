@@ -27,16 +27,24 @@
 ## شروع سریع
 
 ```bash
-# سرور (PC با Docker)
+# سرور روی PC یا Luckfox (Docker)
 cd server
 cp .env.example .env
 docker compose up --build
+# سپس: docker compose exec web python manage.py createsuperuser
+
+# یا بدون Docker روی PC:
+# python -m venv .venv && pip install -r requirements.txt
+# python manage.py migrate && python manage.py runserver 0.0.0.0:8000
 
 # فریم‌ویر
-cd firmware
+cd ../firmware
 cp include/secrets.example.h include/secrets.h   # مقادیر را پر کنید
 pio run -t upload
+pio run -t uploadfs   # LittleFS برای صف آفلاین
 ```
+
+گزارش روزانه ادمین: `/admin/reports/daily/` (خروجی CSV / Excel)
 
 ## امنیت
 

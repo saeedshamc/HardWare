@@ -1,0 +1,19 @@
+# Works on PC (Docker Desktop) and ARM boards (Luckfox) with the same file.
+services:
+  web:
+    build: .
+    image: hozur-server:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/db.sqlite3
+    volumes:
+      - hozur_data:/app/data
+      - hozur_media:/app/media
+    restart: unless-stopped
+
+volumes:
+  hozur_data:
+  hozur_media:

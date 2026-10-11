@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="direction:rtl; text-align:right; padding:1rem;">
+  <h1>گزارش روزانه حضور</h1>
+  <form method="get" style="margin-bottom:1rem;">
+    <label>تاریخ میلادی:
+      <input type="date" name="day" value="{{ day|date:'Y-m-d' }}">
+    </label>
+    <button type="submit" class="button">نمایش</button>
+    <a class="button" href="{% url 'reports-export-csv' %}?day={{ day|date:'Y-m-d' }}">خروجی CSV</a>
+    <a class="button" href="{% url 'reports-export-xlsx' %}?day={{ day|date:'Y-m-d' }}">خروجی Excel</a>
+  </form>
+
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th>نام</th>
+        <th>دپارتمان</th>
+        <th>تاریخ شمسی</th>
+        <th>اولین ورود</th>
+        <th>آخرین خروج</th>
+        <th>ساعات</th>
+        <th>تأخیر (دقیقه)</th>
+        <th>وضعیت</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr style="{% if r.absent %}background:#ffe8e8;{% elif r.late_minutes %}background:#fff6d6;{% endif %}">
+        <td>{{ r.full_name }}</td>
+        <td>{{ r.department }}</td>
+        <td>{{ r.date_jalali }}</td>
+        <td>{{ r.first_in|default:"—" }}</td>
+        <td>{{ r.last_out|default:"—" }}</td>
+        <td>{{ r.total_hours }}</td>
+        <td>{{ r.late_minutes }}</td>
+        <td>{{ r.status_note }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8">کاربری ثبت نشده است.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

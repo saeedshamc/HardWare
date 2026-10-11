@@ -9,6 +9,7 @@ admin.site.index_title = "داشبورد حضور و غیاب"
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("admin/reports/", include("apps.reports.urls")),
     path("api/", include("apps.attendance.urls")),
 ]
 
