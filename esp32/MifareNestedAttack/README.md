@@ -1221,29 +1221,31 @@ RF
 
 ## Project Status
 
-🚧 **Early Development**
+✅ **Core laboratory implemented** (ESP32 firmware + host simulators)
 
-Current target:
-
-```text
-ESP32
-+
-MFRC522
-+
-MIFARE Classic
-```
-
-Future target:
+Implemented:
 
 ```text
-ESP32
-+
-RC522
-+
-Web Dashboard
-+
-Crypto1 Simulator
-+
-Interactive Nested Attack Demonstration
+[x] ESP32 + RC522 SPI setup
+[x] Card detection (UID / ATQA / SAK)
+[x] Card information (1K map)
+[x] Authentication demo (known lab keys)
+[x] Authorized block read
+[x] Sector analyzer (keys redacted by default)
+[x] Access-bits decoder
+[x] Crypto1 conceptual demo (firmware + Python)
+[x] Nested Attack educational simulator (no key recovery)
+[x] Defensive analysis module
 ```
+
+Future:
+
+```text
+[ ] Web dashboard
+[ ] Live serial log UI
+[ ] Graphical card map
+```
+
+Quick start: [`firmware/esp32/README.md`](./firmware/esp32/README.md) · ethics: [`SECURITY.md`](./SECURITY.md)
+
 
