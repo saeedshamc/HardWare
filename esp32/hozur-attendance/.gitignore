@@ -1,0 +1,27 @@
+# Secrets
+firmware/include/secrets.h
+server/.env
+server/.venv/
+server/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Django / local data
+server/db.sqlite3
+server/media/
+server/staticfiles/
+*.log
+
+# PlatformIO / IDE
+firmware/.pio/
+firmware/.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Fonts (download separately if large / licensed)
+# Keep example path; ignore local copies if needed:
+# server/fonts/*.ttf

@@ -1,0 +1,45 @@
+# Hozur (hozur-attendance)
+
+سیستم حضور و غیاب مبتنی بر RFID برای کارکنان یا دانشجویان.
+
+| بخش | مسیر | نقش |
+|-----|------|-----|
+| فریم‌ویر | [`firmware/`](./firmware/) | ESP32 + RC522 + TFT ILI9341 |
+| سرور | [`server/`](./server/) | Django REST + SQLite + Admin |
+| مستندات | [`docs/`](./docs/) | سیم‌کشی، پروتکل، راه‌اندازی |
+
+## سخت‌افزار
+
+- ESP32 DevKit + MFRC522 (RC522) + کارت MIFARE Classic 1K
+- نمایشگر SPI TFT ILI9341 (240×320)
+- بازر + LED وضعیت + دکمه حالت IN/OUT (اختیاری)
+- RTC اختیاری: DS3231
+
+## سرور
+
+قابل اجرا روی:
+
+- **کامپیوتر معمولی** (Windows / Linux / macOS) با Docker یا venv
+- **برد لینوکسی کوچک** مثل Luckfox Pico (ARM)
+
+جزئیات: [`docs/setup.md`](./docs/setup.md)
+
+## شروع سریع
+
+```bash
+# سرور (PC با Docker)
+cd server
+cp .env.example .env
+docker compose up --build
+
+# فریم‌ویر
+cd firmware
+cp include/secrets.example.h include/secrets.h   # مقادیر را پر کنید
+pio run -t upload
+```
+
+## امنیت
+
+- `MASTER_KEY` و API keyها داخل ریپو نیستند.
+- از `secrets.example.h` و `.env.example` کپی بگیرید.
+- کلیدهای کارت به‌صورت diversified از HMAC-SHA256 مشتق می‌شوند.

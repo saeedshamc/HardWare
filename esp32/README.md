@@ -94,6 +94,12 @@ ESP32 یک SoC دو هسته‌ای با وای‌فای و بلوتوث است�
 
 ---
 
+## پروژه‌ها
+
+| پوشه | توضیح |
+|------|--------|
+| [hozur-attendance](./hozur-attendance/) | سیستم حضور و غیاب RFID (ESP32 + Django) |
+
 ## محیط توسعه
 
 - [Arduino IDE](https://www.arduino.cc/en/software) + [بورد ESP32 از Espressif](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html)

@@ -20,18 +20,15 @@
 HardWare-/
 ├── README.md
 ├── arduino-uno-r3/
-│   └── README.md
 ├── arduino-nano/
-│   └── README.md
 ├── arduino-pro-mini/
-│   └── README.md
 ├── esp32/
-│   └── README.md
+│   ├── README.md
+│   └── hozur-attendance/   # حضور و غیاب RFID (firmware + server + docs)
 └── teensy-4.1/
-    └── README.md
 ```
 
-پروژه‌های ریز را مستقیم داخل پوشهٔ هر برد قرار بده (بدون پوشهٔ تو در تو).
+پروژه‌های کوچک را مستقیم داخل پوشهٔ هر برد بگذار؛ پروژه‌های بزرگ‌تر (مثل مونوریپو) می‌توانند زیرپوشه داشته باشند.
 
 ---
 *پروژه HardWare*
