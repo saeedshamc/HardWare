@@ -1,0 +1,5 @@
+typer>=0.12
+rich>=13.7
+pyserial>=3.5
+pydantic>=2.6
+pytest>=8.0

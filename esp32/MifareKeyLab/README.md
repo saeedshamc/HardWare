@@ -1110,58 +1110,60 @@ The software should follow these principles:
 
 # 📦 Project Milestones
 
-## v0.1
+## v0.1 — done
 
 ```text
-[ ] Project structure
-[ ] CLI
-[ ] Card detection
-[ ] Card information
+[x] Project structure
+[x] CLI (Typer + Rich)
+[x] Card detection
+[x] Card information
 ```
 
-## v0.2
+## v0.2 — done
 
 ```text
-[ ] MIFARE Classic sectors
-[ ] Authentication
-[ ] Candidate file
-[ ] Candidate validation
+[x] MIFARE Classic sectors (lab map)
+[x] Authentication
+[x] Candidate file
+[x] Candidate validation
 ```
 
-## v0.3
+## v0.3 — done
 
 ```text
-[ ] Search-space generator
-[ ] Progress UI
-[ ] Reports
-[ ] Logging
+[x] Search-space generator (bounded)
+[x] Progress UI
+[x] Reports (UID/key redaction defaults)
+[x] Logging / performance stats
 ```
 
-## v0.4
+## v0.4 — done
 
 ```text
-[ ] Crypto1 simulator
-[ ] PRNG visualization
-[ ] Authentication visualization
+[x] Crypto1 educational demo
+[x] PRNG / key-space visualization
+[x] Authentication visualization (CLI)
 ```
 
-## v0.5
+## v0.5 — done
 
 ```text
-[ ] Nested Attack simulator
-[ ] Security analysis
-[ ] Classroom mode
+[x] Nested Attack educational simulator
+[x] Security analysis notes (SECURITY.md)
+[x] Classroom / lab interactive mode
+[x] Simulator + ESP32 RC522 backends
 ```
 
-## v1.0
+## v1.0 — future
 
 ```text
 [ ] Chameleon Ultra backend
-[ ] RC522 backend
 [ ] PN532 backend
+[ ] Proxmark3 backend
 [ ] GUI
-[ ] Documentation
 ```
+
+Quick start: [`docs/getting-started.md`](./docs/getting-started.md)
 
 ---
 

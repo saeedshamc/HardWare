@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mifare-keylab"
+version = "0.5.0"
+description = "Educational MIFARE Classic security laboratory"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "pyserial>=3.5",
+  "pydantic>=2.6",
+]
+
+[project.scripts]
+mifare-keylab = "mifare_keylab.cli.app:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mifare_keylab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

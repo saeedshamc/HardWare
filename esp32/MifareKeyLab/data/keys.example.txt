@@ -1,0 +1,8 @@
+# Laboratory candidate keys (12 hex chars per line)
+# Copy to keys.txt for local experiments — keys.txt is gitignored.
+FFFFFFFFFFFF
+A0A1A2A3A4A5
+D3F7D3F7D3F7
+000000000000
+AABBCCDDEEFF
+112233445566
