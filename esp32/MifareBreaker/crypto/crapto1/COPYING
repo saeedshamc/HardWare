@@ -1,0 +1,9 @@
+GNU GENERAL PUBLIC LICENSE
+
+This folder is intended to contain code imported from the Proxmark3 project (https://github.com/Proxmark/proxmark3). The upstream project is licensed under the GNU General Public License (GPL). Please consult the upstream repository for the exact GPL version and copying text.
+
+We recommend fetching the official license text from the GNU website when vendor-ing the code. Example links:
+- GPLv3: https://www.gnu.org/licenses/gpl-3.0.txt
+- GPLv2: https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+If you intend to vendor the upstream sources into this folder, copy the exact upstream COPYING file into this path as `COPYING` so that the license is packaged with the code.
