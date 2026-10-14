@@ -6,9 +6,8 @@
 static void (*g_cb)(const char* json) = NULL;
 static char _tmp[512];
 
-void reporter_init(void) {
-    // Serial is initialized by main; keep reporter_init light-weight
-}
+void reporter_init(void) {}
+
 void reporter_register_cb(void (*cb)(const char* json)) { g_cb = cb; }
 
 static void _emit(const char* json) {
@@ -46,8 +45,9 @@ void reporter_dataRead(uint8_t sector, uint8_t block, const uint8_t* data16) {
     _emit(_tmp);
 }
 void reporter_summary(const CardDump* d, uint32_t elapsed_ms) {
+    uint32_t cracked = ks_countCracked(d);
     snprintf(_tmp, sizeof(_tmp), "{\"event\":\"attack_summary\",\"data\":{\"total_sectors\":%u,\"cracked\":%u,\"failed\":%u,\"elapsed_ms\":%u}}",
-        (unsigned)d->totalSectors, (unsigned)ks_countCracked(d), (unsigned)(d->totalSectors-ks_countCracked(d)), (unsigned)elapsed_ms);
+        (unsigned)d->totalSectors, (unsigned)cracked, (unsigned)(d->totalSectors-cracked), (unsigned)elapsed_ms);
     _emit(_tmp);
 }
 void reporter_dumpSaved(const char* path) {

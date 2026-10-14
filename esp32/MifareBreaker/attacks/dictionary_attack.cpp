@@ -7,7 +7,6 @@
 #include <vector>
 #include <utility>
 #include <stdlib.h>
-#include "storage/sd_helper.h"
 
 static const uint8_t BUILTIN_KEYS_ARR[][6] = {
     {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
@@ -44,7 +43,7 @@ void dictAttack_run(CardDump* d) {
         keys.push_back({(uint8_t*)BUILTIN_KEYS_ARR[i], (char*)BUILTIN_KEYS_HEX[i], false});
     }
     // add SD keys
-    if (sd_is_available()) {
+    if (SD.begin(SD_CS_PIN)) {
         File f = SD.open(DICT_PATH);
         if (f) {
             while (f.available()) {

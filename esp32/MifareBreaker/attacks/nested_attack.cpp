@@ -6,7 +6,6 @@
 #include <vector>
 #include <stdlib.h>
 #include <string.h>
-#include "storage/sd_helper.h"
 
 static void _tryKeyNested(CardDump* d, uint8_t sector, const uint8_t* key, bool isA) {
     uint8_t trailer = ks_sectorToTrailer(sector);
@@ -51,7 +50,7 @@ void nestedAttack_run(CardDump* d) {
     for (int i=0;i<6;i++) kff[i] = (uint8_t)(baseKey[i] ^ 0xFF);
     candidates.push_back(kff);
 
-    if (sd_is_available()) {
+    if (SD.begin(SD_CS_PIN)) {
         File f = SD.open(DICT_PATH);
         if (f) {
             while (f.available()) {
