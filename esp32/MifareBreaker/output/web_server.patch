@@ -1,0 +1,22 @@
+    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (!g_dump_ptr) { request->send(404, "application/json", "{}" ); return; }
+        // Build detailed status with sectors and keys
+        DynamicJsonDocument doc(4096);
+        char uidhex[32]={0}; for (int i=0;i<g_dump_ptr->uid.len;i++) snprintf(uidhex+2*i,3, "%02X", g_dump_ptr->uid.bytes[i]);
+        doc["uid"] = uidhex;
+        doc["sectors_total"] = g_dump_ptr->totalSectors;
+        JsonArray arr = doc.createNestedArray("sectors");
+        for (int s=0;s<g_dump_ptr->totalSectors && s<MAX_SECTORS; s++) {
+            JsonObject o = arr.createNestedObject();
+            o["sector"] = s;
+            o["keyA_status"] = g_dump_ptr->sectors[s].statusA;
+            o["keyB_status"] = g_dump_ptr->sectors[s].statusB;
+            char ka[13] = {0}, kb[13] = {0};
+            if (g_dump_ptr->sectors[s].statusA==KEY_FOUND) for (int i=0;i<6;i++) snprintf(ka+2*i,3, "%02X", g_dump_ptr->sectors[s].keyA[i]);
+            if (g_dump_ptr->sectors[s].statusB==KEY_FOUND) for (int i=0;i<6;i++) snprintf(kb+2*i,3, "%02X", g_dump_ptr->sectors[s].keyB[i]);
+            if (ka[0]) o["keyA"] = ka; if (kb[0]) o["keyB"] = kb;
+            o["data_read"] = g_dump_ptr->sectors[s].dataRead;
+        }
+        String out; serializeJson(doc, out);
+        request->send(200, "application/json", out);
+    });

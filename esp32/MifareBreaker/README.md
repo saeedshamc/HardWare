@@ -6,7 +6,7 @@ Status (branch: mifarebreaker-complete)
 - Core HAL (rc522_driver, card_comm) implemented and tested for basic transceive operations.
 - Core services: uid_reader, key_store implemented.
 - Output: serial_reporter (newline-delimited JSON) and web_server with WebSocket and REST endpoints (/api/status, /api/attack, /api/dump) implemented.
-- Attacks: dictionary attack implemented (builtin + SD keys). Nested and Darkside implemented as heuristics/best-effort using a lightweight test Crypto1 LFSR.
+- Attacks: dictionary attack implemented (builtin keys + SD keys). Nested and Darkside implemented as heuristics/best-effort using a lightweight test Crypto1 LFSR.
 - Crypto: small test LFSR implementation included for development and testing only. NOT a production Crypto1 implementation.
 - Storage: dump_manager writes a simple Proxmark3-like binary (.mfd placeholder) to SD and provides server endpoint to download.
 - UI: data/index.html — single-file offline dashboard that connects via WebSocket and calls REST endpoints.
@@ -33,7 +33,7 @@ Build & Upload
 - If using Arduino IDE: place `data/index.html` in `data/` subfolder and use the ESP32 data upload plugin to upload to SPIFFS.
 
 Files changed in this branch
-- Added/updated: output/, attacks/, crypto/, storage/, data/, tools/, config.h, main.cpp, and others. See commit history on branch `mifarebreaker-release`.
+- Added/updated: output/, attacks/, crypto/, storage/, data/, tools/, config.h, main.cpp, and others. See commit history on branch `mifarebreaker-complete`.
 
 If you'd like, next I will:
 - Integrate a reference Crypto1 (GPL) implementation if you approve the license implications.
