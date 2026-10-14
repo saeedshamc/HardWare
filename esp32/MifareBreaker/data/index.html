@@ -6,26 +6,30 @@
 <style>
 body{font-family:system-ui,monospace;background:#0f1720;color:#cbd5e1;margin:0;padding:0}
 #app{display:flex;height:100vh}
-#left{width:220px;padding:12px;border-right:1px solid #102;}
+#left{width:260px;padding:12px;border-right:1px solid #102;}
 #right{flex:1;padding:12px}
 .tile{background:#111827;padding:8px;margin:6px;border-radius:6px}
 .log{background:#0b1220;padding:8px;height:70vh;overflow:auto;border-radius:6px}
-.button{background:#0b84ff;color:#fff;padding:6px 10px;border-radius:4px;border:none}
+.button{background:#0b84ff;color:#fff;padding:6px 10px;border-radius:4px;border:none;margin-right:6px}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.sector{background:#222;padding:8px;border-radius:4px;text-align:center}
+.sector{background:#222;padding:8px;border-radius:4px;text-align:center;color:#fff}
 .green{background:#064e3b}
 .yellow{background:#92400e}
 .red{background:#7f1d1d}
 .gray{background:#374151}
+.small{font-size:12px;color:#9ca3af}
 </style>
 </head>
 <body>
 <div id=app>
   <div id=left>
-    <div class=tile><h3>MifareBreaker</h3><div id=info>Disconnected</div></div>
-    <div class=tile><button class=button onclick="start('dictionary')">▶ Dictionary</button>
-    <button class=button onclick="start('nested')">▶ Nested</button></div>
-    <div class=tile><button class=button onclick="downloadDump()">⬇ Dump</button></div>
+    <div class=tile><h3>MifareBreaker</h3><div id=info class=small>Connecting...</div></div>
+    <div class=tile>
+      <button id=btnDict class=button onclick="start('dictionary')">▶ Dictionary</button>
+      <button id=btnNested class=button onclick="start('nested')">▶ Nested</button>
+      <button id=btnDark class=button onclick="start('darkside')">▶ Darkside</button>
+    </div>
+    <div class=tile><button class=button onclick="downloadDump()">⬇ Download Dump</button></div>
     <div class=tile><div class=grid id=sectors></div></div>
   </div>
   <div id=right>
@@ -33,21 +37,24 @@ body{font-family:system-ui,monospace;background:#0f1720;color:#cbd5e1;margin:0;p
   </div>
 </div>
 <script>
-let ws;
+let ws; let attackRunning=false;
 function connect(){
   ws = new WebSocket('ws://'+location.host+'/ws');
-  ws.onopen = ()=> log('[WS] connected');
+  ws.onopen = ()=> { log('[WS] connected'); fetchStatus(); };
   ws.onmessage = (m)=> {
     try{ let j=JSON.parse(m.data); handleEvent(j);}catch(e){ log('[raw] '+m.data); }
   };
   ws.onclose = ()=> setTimeout(connect,2000);
 }
-function log(s){ let el=document.getElementById('log'); el.innerText = s+"\n" + el.innerText; }
-function handleEvent(e){ if(e.event==='card_detected'){ document.getElementById('info').innerText='UID:'+e.data.uid; buildGrid(e.data.sectors);} log(JSON.stringify(e)); }
-function buildGrid(n){ let g=document.getElementById('sectors'); g.innerHTML=''; for(let i=0;i<n;i++){ let s=document.createElement('div'); s.className='sector gray'; s.innerText='S'+(i<10?'0':'')+i; g.appendChild(s);} }
-function start(attack){ fetch('/api/attack',{method:'POST', body: JSON.stringify({attack:attack}), headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(j=>log('[api] '+JSON.stringify(j))); }
+function log(s){ let el=document.getElementById('log'); el.innerText = (new Date().toLocaleTimeString())+" " + s+"\n" + el.innerText; }
+function handleEvent(e){ if(e.event==='card_detected'){ document.getElementById('info').innerText='UID:'+e.data.uid; buildGrid(e.data.sectors); } if(e.event==='attack_start'){ attackRunning=true; updateButtons(); log('[attack_start] '+JSON.stringify(e.data)); } if(e.event==='attack_summary'){ attackRunning=false; updateButtons(); log('[attack_summary] '+JSON.stringify(e.data)); } if(e.event==='dump_saved'){ log('[dump] '+e.data.path); } if(e.event==='key_found'){ log('[key_found] S'+(e.data.sector<10?'0':'')+e.data.sector+' '+e.data.key_type+': '+e.data.key); fetchStatus(); } else log(JSON.stringify(e)); }
+function buildGrid(n){ let g=document.getElementById('sectors'); g.innerHTML=''; for(let i=0;i<n;i++){ let s=document.createElement('div'); s.id='s'+i; s.className='sector gray'; s.innerText='S'+(i<10?'0':'')+i; g.appendChild(s);} }
+function start(attack){ if(attackRunning) return; fetch('/api/attack',{method:'POST', body: JSON.stringify({attack:attack}), headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(j=>{ log('[api] '+JSON.stringify(j)); if(j.status=='queued') attackRunning=true; updateButtons(); }); }
 function downloadDump(){ window.location='/api/dump'; }
+function updateButtons(){ document.getElementById('btnDict').disabled=attackRunning; document.getElementById('btnNested').disabled=attackRunning; document.getElementById('btnDark').disabled=attackRunning; }
+function fetchStatus(){ fetch('/api/status').then(r=>r.json()).then(j=>{ if(j.uid) document.getElementById('info').innerText='UID:'+j.uid; if(j.sectors) buildGrid(j.sectors_total||j.sectors); if(j.sectors){ j.sectors.forEach(s=>{ let el=document.getElementById('s'+s.sector); if(!el) return; if(s.keyA_status==1 || s.keyB_status==1) el.className='sector green'; else if(s.keyA_status==2 || s.keyB_status==2) el.className='sector red'; else if(s.data_read) el.className='sector yellow'; else el.className='sector gray'; el.title = JSON.stringify(s); }); } }); }
 connect();
+setInterval(fetchStatus, 3000);
 </script>
 </body>
 </html>
