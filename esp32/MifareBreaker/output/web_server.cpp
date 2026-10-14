@@ -13,89 +13,125 @@ static const CardDump* g_dump_ptr = nullptr;
 static bool attack_running = false;
 
 static void _onReporter(const char* json) {
-    if (!ws) return;
-    ws->textAll(json);
-}
-
-static void _runAttackAsync(const String attackName) {
-    if (attack_running) return;
-    attack_running = true;
-    // Run in background task
-    xTaskCreate([](void* param){
-        String a = *((String*)param);
-        delete (String*)param;
-        if (a=="dictionary") {
-            if (g_dump_ptr) dictAttack_run((CardDump*)g_dump_ptr);
-        } else if (a=="nested") {
-            if (g_dump_ptr) nestedAttack_run((CardDump*)g_dump_ptr);
-        } else if (a=="darkside") {
-            if (g_dump_ptr) {
-                for (uint8_t s=0;s<g_dump_ptr->totalSectors;s++) {
-                    if (!ks_isSectorKnown(g_dump_ptr, s)) darksideAttack_runSector((CardDump*)g_dump_ptr, s);
-                }
-            }
-        }
-        attack_running = false;
-        vTaskDelete(NULL);
-    }, "attackTask", 8*1024, new String(attackName), 1, NULL);
+    if (ws) ws->textAll(json);
 }
 
 void webServer_init(void) {
-    if(!SPIFFS.begin(true)) {
-        reporter_error("SPIFFS_FAIL","SPIFFS mount failed");
+    if (!SPIFFS.begin(true)) {
+        reporter_error("SPIFFS_FAIL", "SPIFFS mount failed");
         return;
     }
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    uint32_t t0=millis();
-    while (WiFi.status()!=WL_CONNECTED && millis()-t0<8000) delay(200);
+    uint32_t t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 8000) {
+        delay(200);
+    }
 
     server = new AsyncWebServer(80);
     ws = new AsyncWebSocket("/ws");
     server->addHandler(ws);
 
-    server->on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(SPIFFS, "/data/index.html", "text/html");
     });
-    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
-        if (!g_dump_ptr) { request->send(404, "application/json", "{}"); return; }
-        DynamicJsonDocument doc(1024);
-        char uidhex[32]={0}; for (int i=0;i<g_dump_ptr->uid.len;i++) snprintf(uidhex+2*i,3, "%02X", g_dump_ptr->uid.bytes[i]);
+
+    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!g_dump_ptr) {
+            request->send(404, "application/json", "{}");
+            return;
+        }
+
+        DynamicJsonDocument doc(4096);
+        char uidhex[32] = {0};
+        for (int i = 0; i < g_dump_ptr->uid.len; i++) {
+            snprintf(uidhex + (2 * i), 3, "%02X", g_dump_ptr->uid.bytes[i]);
+        }
         doc["uid"] = uidhex;
-        doc["sectors"] = g_dump_ptr->totalSectors;
-        String out; serializeJson(doc, out);
+        doc["sectors_total"] = g_dump_ptr->totalSectors;
+        doc["cracked"] = ks_countCracked(g_dump_ptr);
+        JsonArray sectors = doc.createNestedArray("sectors");
+        for (int s = 0; s < g_dump_ptr->totalSectors && s < MAX_SECTORS; s++) {
+            JsonObject o = sectors.createNestedObject();
+            o["sector"] = s;
+            o["keyA_status"] = g_dump_ptr->sectors[s].statusA;
+            o["keyB_status"] = g_dump_ptr->sectors[s].statusB;
+            char ka[13] = {0}, kb[13] = {0};
+            if (g_dump_ptr->sectors[s].statusA == KEY_FOUND) {
+                for (int i = 0; i < 6; i++) snprintf(ka + (2 * i), 3, "%02X", g_dump_ptr->sectors[s].keyA[i]);
+                o["keyA"] = ka;
+            }
+            if (g_dump_ptr->sectors[s].statusB == KEY_FOUND) {
+                for (int i = 0; i < 6; i++) snprintf(kb + (2 * i), 3, "%02X", g_dump_ptr->sectors[s].keyB[i]);
+                o["keyB"] = kb;
+            }
+            o["data_read"] = g_dump_ptr->sectors[s].dataRead;
+        }
+
+        String out;
+        serializeJson(doc, out);
         request->send(200, "application/json", out);
     });
 
-    server->on("/api/attack", HTTP_POST, [](AsyncWebServerRequest *request){
-        String body = String();
-        if (request->contentLength()>0) {
-            AsyncWebParameter* p = request->getParam("plain", true);
-            if (p) body = p->value();
+    server->on("/api/attack", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (attack_running) {
+            request->send(409, "application/json", "{\"error\":\"attack_running\"}");
+            return;
         }
-        if (body.length()==0) {
-            if (request->hasParam("attack", true)) body = String("{\"attack\":\"") + request->getParam("attack", true)->value() + "\"}";
+
+        String body = "";
+        if (request->hasParam("plain", true)) {
+            body = request->getParam("plain", true)->value();
         }
-        if (body.length()==0) { request->send(400, "application/json", "{\"error\":\"missing attack\"}"); return; }
+        if (body.length() == 0 && request->hasParam("attack", true)) {
+            body = String("{\"attack\":\"") + request->getParam("attack", true)->value() + "\"}";
+        }
+        if (body.length() == 0) {
+            request->send(400, "application/json", "{\"error\":\"missing_body\"}");
+            return;
+        }
+
         DynamicJsonDocument doc(256);
-        DeserializationError err = deserializeJson(doc, body);
-        if (err) { request->send(400, "application/json", "{\"error\":\"invalid json\"}"); return; }
+        deserializeJson(doc, body);
         const char* atk = doc["attack"];
-        if (!atk) { request->send(400, "application/json", "{\"error\":\"missing attack\"}"); return; }
-        _runAttackAsync(String(atk));
-        String resp = String("{\"status\":\"queued\",\"attack\":\"") + atk + "\"}";
-        request->send(200, "application/json", resp);
+        if (!atk) {
+            request->send(400, "application/json", "{\"error\":\"missing_attack\"}");
+            return;
+        }
+
+        attack_running = true;
+        String a = String(atk);
+        xTaskCreate([](void* p) {
+            String attackName = *((String*)p);
+            delete (String*)p;
+            if (attackName == "dictionary" && g_dump_ptr) dictAttack_run((CardDump*)g_dump_ptr);
+            else if (attackName == "nested" && g_dump_ptr) nestedAttack_run((CardDump*)g_dump_ptr);
+            else if (attackName == "darkside" && g_dump_ptr) {
+                for (uint8_t s = 0; s < g_dump_ptr->totalSectors; s++) {
+                    if (!ks_isSectorKnown(g_dump_ptr, s)) darksideAttack_runSector((CardDump*)g_dump_ptr, s);
+                }
+            }
+            attack_running = false;
+            vTaskDelete(NULL);
+        }, "attack_task", 8 * 1024, new String(a), 1, NULL);
+
+        request->send(200, "application/json", String("{\"status\":\"queued\",\"attack\":\"") + atk + "\"}");
     });
 
-    server->on("/api/dump", HTTP_GET, [](AsyncWebServerRequest *request){
+    server->on("/api/dump", HTTP_GET, [](AsyncWebServerRequest *request) {
         const char* p = dump_lastPath();
-        if (!p) { request->send(404, "application/json", "{\"error\":\"no_dump\"}"); return; }
-        // stream file from SD
-        File f = SD.open(String(p));
-        if (!f) { request->send(500, "application/json", "{\"error\":\"file_open_failed\"}"); return; }
-        AsyncWebServerResponse *response = request->beginResponseStream("application/octet-stream");
+        if (!p) {
+            request->send(404, "application/json", "{\"error\":\"no_dump\"}");
+            return;
+        }
+        File f = SD.open(p);
+        if (!f) {
+            request->send(500, "application/json", "{\"error\":\"file_open_failed\"}");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponseStream("application/octet-stream");
         response->addHeader("Content-Disposition", String("attachment; filename=") + String(p));
-        // stream in chunks
         uint8_t buf[256];
         while (f.available()) {
             size_t r = f.read(buf, sizeof(buf));
