@@ -1,0 +1,3 @@
+[submodule "esp32/MifareBreaker/crypto/crapto1"]
+	path = esp32/MifareBreaker/crypto/crapto1
+	url = https://github.com/Proxmark/proxmark3
