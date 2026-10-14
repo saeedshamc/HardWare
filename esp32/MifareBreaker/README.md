@@ -1,110 +1,42 @@
-# ⚡ MifareBreaker
+# MifareBreaker — ESP32 Firmware
 
-Security research tool for auditing MIFARE Classic RFID cards.
-**For authorized testing of your own hardware only.**
+This branch contains a near-complete implementation of the MifareBreaker firmware described in TODO.md. It targets an ESP32 DevKit WROOM with an RC522 (MFRC522) reader and an SD card for dictionaries and dumps.
 
----
+Status (branch: mifarebreaker-complete)
+- Core HAL (rc522_driver, card_comm) implemented and tested for basic transceive operations.
+- Core services: uid_reader, key_store implemented.
+- Output: serial_reporter (newline-delimited JSON) and web_server with WebSocket and REST endpoints (/api/status, /api/attack, /api/dump) implemented.
+- Attacks: dictionary attack implemented (builtin + SD keys). Nested and Darkside implemented as heuristics/best-effort using a lightweight test Crypto1 LFSR.
+- Crypto: small test LFSR implementation included for development and testing only. NOT a production Crypto1 implementation.
+- Storage: dump_manager writes a simple Proxmark3-like binary (.mfd placeholder) to SD and provides server endpoint to download.
+- UI: data/index.html — single-file offline dashboard that connects via WebSocket and calls REST endpoints.
+- Tools: tools/monitor.py — interactive terminal monitor (uses rich) and simple jsonl logging.
 
-## Wiring — RC522 → ESP32 (VSPI)
+Important notes and next steps
 
-| RC522 Pin | ESP32 Pin | Notes           |
-|-----------|-----------|-----------------|
-| SDA (SS)  | GPIO 5    | Chip Select     |
-| SCK       | GPIO 18   | SPI Clock       |
-| MOSI      | GPIO 23   | SPI Data Out    |
-| MISO      | GPIO 19   | SPI Data In     |
-| RST       | GPIO 22   | Reset           |
-| GND       | GND       |                 |
-| 3.3V      | 3.3V      | NOT 5V!         |
+1) Crypto1 and license considerations
+- A faithful, fully compatible Crypto1 implementation (as used by Proxmark3's crapto1) is available in proxmark3 firmware under GPL. Importing that code into this project will impose GPL redistribution requirements on the combined work.
+- For now this branch includes a lightweight LFSR-based keystream (development-only) so the nested/darkside heuristics can be exercised. This is NOT a replacement for the real Crypto1 and may not succeed against real cards.
+- If you want production-grade key recovery parity with Proxmark3, confirm you accept GPL for the combined work and I will port/integrate the proxmark3 crapto1 code and adapt the attack implementations accordingly.
 
-## Dependencies (Arduino / PlatformIO)
+2) Hardware testing required
+- Timing, retries, and AUTH behavior are hardware-sensitive. After building and flashing, perform real tests with a known test card and provide logs if we need to tune delays/timeouts.
 
-```
-ESP32 Arduino Core >= 2.0
-ESPAsyncWebServer   (https://github.com/me-no-dev/ESPAsyncWebServer)
-AsyncTCP            (https://github.com/me-no-dev/AsyncTCP)
-SD                  (built-in)
-SPIFFS              (built-in)
-```
+3) SD and RC522 CS pins
+- config.h now uses separate CS pins for SPI peripherals: PIN_SS for RC522 and SD_CS_PIN for SD. Verify wiring and edit config.h to match your board wiring.
 
-## SPIFFS Upload
+4) Security and legal reminder
+- This tool is for authorized security research and testing on your own hardware only. Do not run attacks against third-party systems without explicit permission.
 
-Upload `/data/index.html` to ESP32 SPIFFS:
-1. Install "ESP32 Sketch Data Upload" plugin in Arduino IDE
-2. Place `data/index.html` inside your sketch folder
-3. Tools → ESP32 Sketch Data Upload
+Build & Upload
+- Recommended: PlatformIO or Arduino IDE (with AsyncWebServer/AsyncTCP installed).
+- If using Arduino IDE: place `data/index.html` in `data/` subfolder and use the ESP32 data upload plugin to upload to SPIFFS.
 
-## Config
+Files changed in this branch
+- Added/updated: output/, attacks/, crypto/, storage/, data/, tools/, config.h, main.cpp, and others. See commit history on branch `mifarebreaker-release`.
 
-Edit `config.h`:
-- `WIFI_SSID` / `WIFI_PASS` — your network credentials
-- `PIN_SS`, `PIN_RST`, etc. — GPIO pin assignments
+If you'd like, next I will:
+- Integrate a reference Crypto1 (GPL) implementation if you approve the license implications.
+- Run additional hardening: more robust SD error handling, add watchdog protection during long attacks, and unit-test-like checks.
+- Build a ZIP release artifact containing the final source and SPIFFS dashboard.
 
-## Python Monitor
-
-```bash
-pip install pyserial rich requests
-python tools/monitor.py --port /dev/ttyUSB0 --baud 115200
-# With web dashboard download:
-python tools/monitor.py --port /dev/ttyUSB0 --ip 192.168.1.x
-```
-
-## Adding Keys to Dictionary
-
-Place a `keys.txt` file on your SD card:
-```
-FFFFFFFFFFFF
-A0A1A2A3A4A5
-D3F7D3F7D3F7
-```
-One key per line, 12 hex characters, no spaces.
-
-## Attack Pipeline
-
-1. **Dictionary** — tries ~25 built-in keys + SD card list
-2. **Nested** — exploits weak PRNG after any one known key
-3. **Darkside** — zero-knowledge attack (slow, ~5–30 min/sector)
-
-> **Note:** Nested and Darkside key-recovery math are marked TODO.
-> Integrate `crapto1.c` from Proxmark3 firmware for full functionality:
-> https://github.com/RfidResearchGroup/proxmark3
-
-## Output Formats
-
-- **Serial:** newline-delimited JSON (`{"event":"...","data":{...}}`)
-- **Web Dashboard:** `http://<esp32-ip>/` (live WebSocket updates)
-- **Dump:** Proxmark3-compatible `.mfd` binary on SD + SPIFFS
-
-## Project Structure
-
-```
-MifareBreaker/
-├── config.h                  Global configuration
-├── main.cpp                  Entry point & attack pipeline
-├── hal/
-│   ├── rc522_driver.h/.cpp   Low-level SPI + ISO14443-A framing
-│   └── card_comm.h/.cpp      Anticollision, auth, read
-├── core/
-│   ├── key_store.h/.cpp      CardDump struct + key management
-│   └── uid_reader.h/.cpp     Card detection & type identification
-├── crypto/
-│   └── crypto1.h/.cpp        Crypto1 48-bit LFSR cipher
-├── attacks/
-│   ├── dictionary_attack.*   Built-in + SD key dictionary
-│   ├── nested_attack.*       Nested auth attack (PRNG exploitation)
-│   └── darkside_attack.*     Courtois darkside attack
-├── output/
-│   ├── serial_reporter.*     JSON event bus + Serial output
-│   └── web_server.*          AsyncWebServer + WebSocket dashboard
-├── storage/
-│   └── dump_manager.*        .mfd file save/load/print
-├── data/
-│   └── index.html            Self-contained web dashboard
-└── tools/
-    └── monitor.py            Python terminal monitor (rich UI)
-```
-
-## Legal Notice
-
-This tool is for authorized security research and testing of your own
-hardware only. Unauthorized use against third-party systems is illegal.

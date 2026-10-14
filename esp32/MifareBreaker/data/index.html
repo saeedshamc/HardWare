@@ -1,324 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MifareBreaker</title>
+<meta charset="utf-8" />
+<title>MifareBreaker Dashboard</title>
 <style>
-:root {
-  --bg:#0d1117; --surface:#161b22; --border:#30363d;
-  --text:#c9d1d9; --dim:#8b949e; --mono:"Courier New",monospace;
-  --green:#3fb950; --yellow:#e3b341; --red:#f85149;
-  --blue:#58a6ff; --purple:#bc8cff; --orange:#f0883e;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;height:100vh;display:flex;flex-direction:column}
-/* ── Header ── */
-header{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-header h1{font-size:15px;letter-spacing:2px;color:var(--blue)}
-#status-dot{width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;margin-right:6px;transition:background .3s}
-#status-dot.connected{background:var(--green)}
-/* ── Layout ── */
-main{display:flex;flex:1;overflow:hidden}
-/* ── Left panel: sector grid ── */
-#left{width:220px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:12px}
-#left h2{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:10px}
-.sector-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.sector-tile{aspect-ratio:1;border-radius:4px;border:1px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--dim);transition:all .2s;position:relative}
-.sector-tile:hover{border-color:var(--blue);color:var(--text)}
-.sector-tile.cracked{background:#1a3a1f;border-color:var(--green);color:var(--green)}
-.sector-tile.partial{background:#3a2e0a;border-color:var(--yellow);color:var(--yellow)}
-.sector-tile.failed{background:#3a0f0f;border-color:var(--red);color:var(--red)}
-.sector-tile.active{animation:pulse 1s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-/* ── Right panel ── */
-#right{flex:1;display:flex;flex-direction:column;overflow:hidden}
-/* Card info bar */
-#card-info{padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:24px;flex-shrink:0}
-.info-item{display:flex;flex-direction:column}
-.info-label{font-size:10px;color:var(--dim);letter-spacing:1px}
-.info-val{font-size:13px;color:var(--text)}
-#crack-bar-wrap{margin-top:4px;width:100%}
-#crack-bar{height:3px;background:var(--green);width:0%;transition:width .4s;border-radius:2px}
-/* Sector detail panel */
-#detail{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;min-height:72px}
-#detail h3{font-size:11px;color:var(--dim);margin-bottom:6px}
-#detail-content{font-size:12px;color:var(--text);white-space:pre}
-/* Live log */
-#log-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
-#log-wrap h3{font-size:11px;color:var(--dim);padding:8px 14px 4px;border-bottom:1px solid var(--border)}
-#log{flex:1;overflow-y:auto;padding:6px 14px;font-size:11px;line-height:1.7}
-.log-entry{display:flex;gap:8px;align-items:baseline}
-.log-time{color:var(--dim);flex-shrink:0}
-.log-event{flex-shrink:0}
-.log-msg{color:var(--dim)}
-.ev-key_found{color:var(--green)}
-.ev-card_detected{color:var(--blue)}
-.ev-attack_start{color:var(--yellow)}
-.ev-key_failed{color:var(--red)}
-.ev-data_read{color:var(--purple)}
-.ev-attack_summary{color:var(--orange)}
-.ev-error{color:var(--red)}
-/* Controls */
-#controls{padding:10px 14px;border-top:1px solid var(--border);background:var(--surface);display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
-.btn{padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-family:var(--mono);font-size:12px;transition:all .15s}
-.btn:hover:not(:disabled){border-color:var(--blue);color:var(--blue)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-primary{border-color:var(--blue);color:var(--blue)}
-.btn-danger{border-color:var(--red);color:var(--red)}
-.btn-success{border-color:var(--green);color:var(--green)}
+body{font-family:system-ui,monospace;background:#0f1720;color:#cbd5e1;margin:0;padding:0}
+#app{display:flex;height:100vh}
+#left{width:260px;padding:12px;border-right:1px solid #102;}
+#right{flex:1;padding:12px}
+.tile{background:#111827;padding:8px;margin:6px;border-radius:6px}
+.log{background:#0b1220;padding:8px;height:70vh;overflow:auto;border-radius:6px}
+.button{background:#0b84ff;color:#fff;padding:6px 10px;border-radius:4px;border:none;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sector{background:#222;padding:8px;border-radius:4px;text-align:center;color:#fff}
+.green{background:#064e3b}
+.yellow{background:#92400e}
+.red{background:#7f1d1d}
+.gray{background:#374151}
+.small{font-size:12px;color:#9ca3af}
 </style>
 </head>
 <body>
-<header>
-  <h1>⚡ MifareBreaker</h1>
-  <div id="ws-status"><span id="status-dot"></span><span id="status-txt">Disconnected</span></div>
-</header>
-<main>
-  <!-- Left: sector grid -->
-  <section id="left">
-    <h2>SECTOR MAP</h2>
-    <div class="sector-grid" id="sector-grid"></div>
-    <div style="margin-top:10px;font-size:10px;color:var(--dim)">
-      <div><span style="color:var(--green)">■</span> Cracked</div>
-      <div><span style="color:var(--yellow)">■</span> Partial</div>
-      <div><span style="color:var(--red)">■</span> Failed</div>
-      <div><span style="color:var(--border)">■</span> Unknown</div>
+<div id=app>
+  <div id=left>
+    <div class=tile><h3>MifareBreaker</h3><div id=info class=small>Connecting...</div></div>
+    <div class=tile>
+      <button id=btnDict class=button onclick="start('dictionary')">▶ Dictionary</button>
+      <button id=btnNested class=button onclick="start('nested')">▶ Nested</button>
+      <button id=btnDark class=button onclick="start('darkside')">▶ Darkside</button>
     </div>
-  </section>
-  <!-- Right panel -->
-  <section id="right">
-    <!-- Card info -->
-    <div id="card-info">
-      <div class="info-item"><span class="info-label">UID</span><span class="info-val" id="inf-uid">—</span></div>
-      <div class="info-item"><span class="info-label">TYPE</span><span class="info-val" id="inf-type">—</span></div>
-      <div class="info-item"><span class="info-label">CRACKED</span><span class="info-val" id="inf-cracked">0/0</span></div>
-      <div class="info-item" style="flex:1">
-        <span class="info-label">PROGRESS</span>
-        <div id="crack-bar-wrap"><div id="crack-bar"></div></div>
-      </div>
-    </div>
-    <!-- Sector detail -->
-    <div id="detail">
-      <h3>SECTOR DETAIL — click a tile</h3>
-      <div id="detail-content" style="color:var(--dim)">Select a sector to view keys and data</div>
-    </div>
-    <!-- Log -->
-    <div id="log-wrap">
-      <h3>LIVE LOG &nbsp;<span id="log-count" style="color:var(--dim)">0 events</span></h3>
-      <div id="log"></div>
-    </div>
-    <!-- Controls -->
-    <div id="controls">
-      <button class="btn btn-primary" onclick="startAttack('dictionary')" id="btn-dict">▶ Dictionary</button>
-      <button class="btn btn-primary" onclick="startAttack('nested')"     id="btn-nest">▶ Nested</button>
-      <button class="btn btn-danger"  onclick="startAttack('darkside')"   id="btn-dark">▶ Darkside</button>
-      <button class="btn btn-success" onclick="downloadDump()"            id="btn-dump">⬇ Dump</button>
-      <button class="btn"             onclick="clearLog()">✕ Clear Log</button>
-    </div>
-  </section>
-</main>
+    <div class=tile><button class=button onclick="downloadDump()">⬇ Download Dump</button></div>
+    <div class=tile><div class=grid id=sectors></div></div>
+  </div>
+  <div id=right>
+    <div class=tile><h4>Live Log</h4><div id=log class=log></div></div>
+  </div>
+</div>
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-const state = {
-  sectors: [],       // array of {keyA,keyB,statusA,statusB,data:[]}
-  uid: '—', type: '—', total: 0, cracked: 0,
-  attackRunning: false,
-  logCount: 0
-};
-let ws = null, wsRetry = null;
-
-// ── Init ───────────────────────────────────────────────────────────────────
-function init() {
-  fetchStatus();
-  connectWS();
+let ws; let attackRunning=false;
+function connect(){
+  ws = new WebSocket('ws://'+location.host+'/ws');
+  ws.onopen = ()=> { log('[WS] connected'); fetchStatus(); };
+  ws.onmessage = (m)=> {
+    try{ let j=JSON.parse(m.data); handleEvent(j);}catch(e){ log('[raw] '+m.data); }
+  };
+  ws.onclose = ()=> setTimeout(connect,2000);
 }
-
-// ── Fetch initial status ───────────────────────────────────────────────────
-function fetchStatus() {
-  fetch('/api/status').then(r => r.json()).then(d => {
-    if (d.uid) {
-      state.uid     = d.uid;
-      state.type    = d.type;
-      state.total   = d.sectors;
-      state.cracked = d.cracked;
-      buildGrid(d.sectors);
-      updateInfoBar();
-    }
-  }).catch(() => {});
-}
-
-// ── WebSocket ──────────────────────────────────────────────────────────────
-function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host + '/ws');
-  ws.onopen  = () => { setStatus(true);  if(wsRetry){clearInterval(wsRetry);wsRetry=null;} };
-  ws.onclose = () => { setStatus(false); if(!wsRetry) wsRetry = setInterval(connectWS, 3000); };
-  ws.onmessage = e => { try { handleEvent(JSON.parse(e.data)); } catch(_){} };
-}
-
-function setStatus(ok) {
-  document.getElementById('status-dot').className = ok ? 'connected' : '';
-  document.getElementById('status-txt').textContent = ok ? 'Connected' : 'Disconnected';
-}
-
-// ── Event handling ─────────────────────────────────────────────────────────
-function handleEvent(ev) {
-  addLog(ev);
-  const d = ev.data || {};
-  switch (ev.event) {
-    case 'card_detected':
-      state.uid   = d.uid   || '—';
-      state.type  = d.type  || '—';
-      state.total = d.sectors || 0;
-      state.cracked = 0;
-      resetSectors(state.total);
-      buildGrid(state.total);
-      updateInfoBar();
-      break;
-    case 'attack_start':
-      setTileClass(d.sector, 'active');
-      state.attackRunning = true;
-      updateButtons();
-      break;
-    case 'key_found':
-      { const s = state.sectors[d.sector] || {};
-        if (d.key_type === 'A') s.keyA = d.key;
-        else                    s.keyB = d.key;
-        state.sectors[d.sector] = s;
-        updateTile(d.sector);
-        state.cracked = state.sectors.filter(s => s && (s.keyA || s.keyB)).length;
-        updateInfoBar(); }
-      break;
-    case 'key_failed':
-      setTileClass(d.sector, 'failed');
-      break;
-    case 'data_read':
-      { const s = state.sectors[d.sector] || {};
-        if (!s.blocks) s.blocks = [];
-        s.blocks[d.block] = d.hex;
-        state.sectors[d.sector] = s; }
-      break;
-    case 'attack_summary':
-      state.attackRunning = false;
-      updateButtons();
-      // Refresh all tiles
-      state.sectors.forEach((_, i) => updateTile(i));
-      break;
-  }
-}
-
-// ── Sector grid ────────────────────────────────────────────────────────────
-function buildGrid(count) {
-  const g = document.getElementById('sector-grid');
-  g.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const t = document.createElement('div');
-    t.className = 'sector-tile';
-    t.id = 'tile-' + i;
-    t.textContent = 'S' + String(i).padStart(2,'0');
-    t.onclick = () => showDetail(i);
-    g.appendChild(t);
-  }
-}
-function resetSectors(count) {
-  state.sectors = Array(count).fill(null).map(() => ({}));
-}
-function setTileClass(idx, cls) {
-  const t = document.getElementById('tile-' + idx);
-  if (t) { t.className = 'sector-tile ' + cls; }
-}
-function updateTile(idx) {
-  const s = state.sectors[idx];
-  if (!s) return;
-  const hasA = !!s.keyA, hasB = !!s.keyB;
-  const cls = (hasA && hasB) ? 'cracked' : (hasA || hasB) ? 'partial' : 'failed';
-  setTileClass(idx, (hasA || hasB) ? cls : 'failed');
-}
-
-// ── Info bar ───────────────────────────────────────────────────────────────
-function updateInfoBar() {
-  document.getElementById('inf-uid').textContent     = state.uid;
-  document.getElementById('inf-type').textContent    = state.type;
-  document.getElementById('inf-cracked').textContent = state.cracked + '/' + state.total;
-  const pct = state.total ? (state.cracked / state.total * 100) : 0;
-  document.getElementById('crack-bar').style.width   = pct + '%';
-}
-
-// ── Sector detail ──────────────────────────────────────────────────────────
-function showDetail(idx) {
-  const s = state.sectors[idx] || {};
-  let txt = 'Sector ' + idx + '\n';
-  txt += '  Key A: ' + (s.keyA || '????????????') + '\n';
-  txt += '  Key B: ' + (s.keyB || '????????????') + '\n';
-  if (s.blocks) {
-    txt += '\n  Data blocks:\n';
-    s.blocks.forEach((h, i) => { if(h) txt += '  [' + i + '] ' + h + '\n'; });
-  }
-  document.getElementById('detail-content').textContent = txt;
-  document.getElementById('detail').querySelector('h3').textContent =
-    'SECTOR DETAIL — S' + String(idx).padStart(2,'0');
-}
-
-// ── Live log ───────────────────────────────────────────────────────────────
-const EV_COLORS = {
-  card_detected:'ev-card_detected', attack_start:'ev-attack_start',
-  key_found:'ev-key_found', key_failed:'ev-key_failed',
-  data_read:'ev-data_read', attack_summary:'ev-attack_summary',
-  dump_saved:'ev-key_found', error:'ev-error'
-};
-function addLog(ev) {
-  const log = document.getElementById('log');
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  const now = new Date(); const ts = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
-  const evSpan = document.createElement('span');
-  evSpan.className = 'log-event ' + (EV_COLORS[ev.event] || '');
-  evSpan.textContent = '[' + (ev.event || 'unknown') + ']';
-  let msg = '';
-  const d = ev.data || {};
-  if (ev.event==='key_found')      msg = 'S'+d.sector+' Key'+d.key_type+': '+d.key+' ('+d.method+')';
-  else if (ev.event==='key_failed')msg = 'S'+d.sector+' Key'+d.key_type+' not found';
-  else if (ev.event==='card_detected') msg = d.uid+' '+d.type+' ('+d.sectors+' sectors)';
-  else if (ev.event==='attack_start')  msg = d.attack+' → S'+d.sector+' Key'+d.key_type;
-  else if (ev.event==='data_read')     msg = 'S'+d.sector+' B'+d.block+': '+d.hex;
-  else if (ev.event==='attack_summary')msg = 'Done: '+d.cracked+'/'+d.total_sectors+' cracked in '+(d.elapsed_ms/1000).toFixed(1)+'s';
-  else if (ev.event==='error')         msg = '['+d.code+'] '+d.msg;
-  else if (ev.event==='dump_saved')    msg = d.path;
-  entry.innerHTML = '<span class="log-time">'+ts+'</span>';
-  entry.appendChild(evSpan);
-  const msgEl = document.createElement('span');
-  msgEl.className = 'log-msg'; msgEl.textContent = msg;
-  entry.appendChild(msgEl);
-  log.appendChild(entry);
-  log.scrollTop = log.scrollHeight;
-  state.logCount++;
-  document.getElementById('log-count').textContent = state.logCount + ' events';
-}
-function clearLog() {
-  document.getElementById('log').innerHTML = '';
-  state.logCount = 0;
-  document.getElementById('log-count').textContent = '0 events';
-}
-
-// ── Attack controls ─────────────────────────────────────────────────────────
-function startAttack(type) {
-  if (state.attackRunning) return;
-  fetch('/api/attack', { method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({attack: type}) })
-  .then(r => r.json())
-  .then(d => { if(d.queued) { state.attackRunning=true; updateButtons(); } });
-}
-function downloadDump() {
-  window.location.href = '/api/dump';
-}
-function updateButtons() {
-  ['btn-dict','btn-nest','btn-dark'].forEach(id => {
-    document.getElementById(id).disabled = state.attackRunning;
-  });
-}
-
-init();
+function log(s){ let el=document.getElementById('log'); el.innerText = (new Date().toLocaleTimeString())+" " + s+"\n" + el.innerText; }
+function handleEvent(e){ if(e.event==='card_detected'){ document.getElementById('info').innerText='UID:'+e.data.uid; buildGrid(e.data.sectors); } if(e.event==='attack_start'){ attackRunning=true; updateButtons(); log('[attack_start] '+JSON.stringify(e.data)); } if(e.event==='attack_summary'){ attackRunning=false; updateButtons(); log('[attack_summary] '+JSON.stringify(e.data)); } if(e.event==='dump_saved'){ log('[dump] '+e.data.path); } if(e.event==='key_found'){ log('[key_found] S'+(e.data.sector<10?'0':'')+e.data.sector+' '+e.data.key_type+': '+e.data.key); fetchStatus(); } else log(JSON.stringify(e)); }
+function buildGrid(n){ let g=document.getElementById('sectors'); g.innerHTML=''; for(let i=0;i<n;i++){ let s=document.createElement('div'); s.id='s'+i; s.className='sector gray'; s.innerText='S'+(i<10?'0':'')+i; g.appendChild(s);} }
+function start(attack){ if(attackRunning) return; fetch('/api/attack',{method:'POST', body: JSON.stringify({attack:attack}), headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(j=>{ log('[api] '+JSON.stringify(j)); if(j.status=='queued') attackRunning=true; updateButtons(); }); }
+function downloadDump(){ window.location='/api/dump'; }
+function updateButtons(){ document.getElementById('btnDict').disabled=attackRunning; document.getElementById('btnNested').disabled=attackRunning; document.getElementById('btnDark').disabled=attackRunning; }
+function fetchStatus(){ fetch('/api/status').then(r=>r.json()).then(j=>{ if(j.uid) document.getElementById('info').innerText='UID:'+j.uid; if(j.sectors) buildGrid(j.sectors_total||j.sectors); if(j.sectors){ j.sectors.forEach(s=>{ let el=document.getElementById('s'+s.sector); if(!el) return; if(s.keyA_status==1 || s.keyB_status==1) el.className='sector green'; else if(s.keyA_status==2 || s.keyB_status==2) el.className='sector red'; else if(s.data_read) el.className='sector yellow'; else el.className='sector gray'; el.title = JSON.stringify(s); }); } }); }
+connect();
+setInterval(fetchStatus, 3000);
 </script>
 </body>
 </html>

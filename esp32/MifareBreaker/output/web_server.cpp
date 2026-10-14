@@ -1,142 +1,148 @@
-#include "web_server.h"
-#include "output/serial_reporter.h"
-#include "config.h"
+#include "output/web_server.h"
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
-#include <string.h>
-#include <stdio.h>
+#include <ArduinoJson.h>
+#include "output/serial_reporter.h"
+#include "storage/dump_manager.h"
 
-static AsyncWebServer  _srv(80);
-static AsyncWebSocket  _ws("/ws");
-static const CardDump* _dump = nullptr;
+static AsyncWebServer* server = nullptr;
+static AsyncWebSocket* ws = nullptr;
+static const CardDump* g_dump_ptr = nullptr;
+static bool attack_running = false;
 
-// ─── WebSocket event handler ────────────────────────────────────────────────
-static void _wsEvent(AsyncWebSocket* ws, AsyncWebSocketClient* client,
-                     AwsEventType type, void* arg, uint8_t* data, size_t len)
-{
-    if (type == WS_EVT_CONNECT) {
-        // Send current dump state as a snapshot on connect
-        if (_dump) {
-            char buf[128];
-            snprintf(buf, sizeof(buf),
-                "{\"event\":\"snapshot\",\"data\":{\"cracked\":%d,\"total\":%d,\"uid_len\":%d}}",
-                ks_countCracked(_dump), _dump->totalSectors, _dump->uid.len);
-            client->text(buf);
-        }
-    }
-    // WS_EVT_DISCONNECT, WS_EVT_DATA handled automatically
-    (void)arg; (void)data; (void)len;
+static void _onReporter(const char* json) {
+    if (ws) ws->textAll(json);
 }
 
-// ─── Broadcast (called by reporter observer) ────────────────────────────────
-void webServer_broadcastEvent(const char* jsonLine) {
-    if (_ws.count() > 0) _ws.textAll(jsonLine);
-}
-
-void webServer_setDump(const CardDump* dump) { _dump = dump; }
-
-// ─── Status serializer ─────────────────────────────────────────────────────
-static String _buildStatus() {
-    if (!_dump) return "{\"status\":\"idle\"}";
-    char uid[21] = "N/A";
-    if (_dump->uid.len > 0) {
-        const char* H = "0123456789ABCDEF";
-        for (uint8_t i = 0; i < _dump->uid.len && i < 10; i++) {
-            uid[i*2]   = H[(_dump->uid.bytes[i]>>4)&0xF];
-            uid[i*2+1] = H[ _dump->uid.bytes[i]    &0xF];
-        }
-        uid[_dump->uid.len*2] = '\0';
-    }
-    char buf[512];
-    snprintf(buf, sizeof(buf),
-        "{\"uid\":\"%s\",\"type\":\"%s\",\"sectors\":%d,\"cracked\":%d}",
-        uid,
-        _dump->cardType == 4 ? "MIFARE_4K" : "MIFARE_1K",
-        _dump->totalSectors,
-        ks_countCracked(_dump));
-    return String(buf);
-}
-
-// ─── Init ───────────────────────────────────────────────────────────────────
 void webServer_init(void) {
-    // WiFi
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    for (uint8_t i = 0; i < 20 && WiFi.status() != WL_CONNECTED; i++) delay(500);
-
-    if (WiFi.status() != WL_CONNECTED) {
-        reporter_error("WIFI_FAIL", "Cannot connect to WiFi — web dashboard unavailable");
-        return;
-    }
-    {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "http://%s", WiFi.localIP().toString().c_str());
-        reporter_error("WIFI_OK", msg);
-    }
-
-    // SPIFFS
     if (!SPIFFS.begin(true)) {
         reporter_error("SPIFFS_FAIL", "SPIFFS mount failed");
         return;
     }
 
-    // WebSocket
-    _ws.onEvent(_wsEvent);
-    _srv.addHandler(&_ws);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    uint32_t t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 8000) {
+        delay(200);
+    }
 
-    // Static files from SPIFFS /data/
-    _srv.serveStatic("/", SPIFFS, "/data/").setDefaultFile("index.html");
+    server = new AsyncWebServer(80);
+    ws = new AsyncWebSocket("/ws");
+    server->addHandler(ws);
 
-    // GET /api/status — current dump snapshot
-    _srv.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
-        req->send(200, "application/json", _buildStatus());
+    server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(SPIFFS, "/data/index.html", "text/html");
     });
 
-    // GET /api/dump — download latest .mfd file
-    _srv.on("/api/dump", HTTP_GET, [](AsyncWebServerRequest* req) {
-        if (SPIFFS.exists("/dump_latest.mfd")) {
-            req->send(SPIFFS, "/dump_latest.mfd", "application/octet-stream",
-                      true /* download */);
-        } else {
-            req->send(404, "text/plain", "No dump available yet");
+    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!g_dump_ptr) {
+            request->send(404, "application/json", "{}");
+            return;
         }
+
+        DynamicJsonDocument doc(4096);
+        char uidhex[32] = {0};
+        for (int i = 0; i < g_dump_ptr->uid.len; i++) {
+            snprintf(uidhex + (2 * i), 3, "%02X", g_dump_ptr->uid.bytes[i]);
+        }
+        doc["uid"] = uidhex;
+        doc["sectors_total"] = g_dump_ptr->totalSectors;
+        doc["cracked"] = ks_countCracked(g_dump_ptr);
+        JsonArray sectors = doc.createNestedArray("sectors");
+        for (int s = 0; s < g_dump_ptr->totalSectors && s < MAX_SECTORS; s++) {
+            JsonObject o = sectors.createNestedObject();
+            o["sector"] = s;
+            o["keyA_status"] = g_dump_ptr->sectors[s].statusA;
+            o["keyB_status"] = g_dump_ptr->sectors[s].statusB;
+            char ka[13] = {0}, kb[13] = {0};
+            if (g_dump_ptr->sectors[s].statusA == KEY_FOUND) {
+                for (int i = 0; i < 6; i++) snprintf(ka + (2 * i), 3, "%02X", g_dump_ptr->sectors[s].keyA[i]);
+                o["keyA"] = ka;
+            }
+            if (g_dump_ptr->sectors[s].statusB == KEY_FOUND) {
+                for (int i = 0; i < 6; i++) snprintf(kb + (2 * i), 3, "%02X", g_dump_ptr->sectors[s].keyB[i]);
+                o["keyB"] = kb;
+            }
+            o["data_read"] = g_dump_ptr->sectors[s].dataRead;
+        }
+
+        String out;
+        serializeJson(doc, out);
+        request->send(200, "application/json", out);
     });
 
-    // POST /api/attack — trigger attack from dashboard
-    // Body: {"attack":"dictionary"|"nested"|"darkside"}
-    _srv.on("/api/attack", HTTP_POST,
-        [](AsyncWebServerRequest* req) {
-            req->send(200, "application/json", "{\"queued\":true}");
-        },
-        nullptr,
-        [](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t, size_t) {
-            // Parse attack type from body (simple substring match — no JSON lib needed)
-            char body[64] = {};
-            memcpy(body, data, len < 63 ? len : 63);
-            reporter_error("ATTACK_REQ", body);  // re-emit as event so observer routes it
+    server->on("/api/attack", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (attack_running) {
+            request->send(409, "application/json", "{\"error\":\"attack_running\"}");
+            return;
         }
-    );
 
-    // POST /api/wifi — update credentials at runtime
-    _srv.on("/api/wifi", HTTP_POST,
-        [](AsyncWebServerRequest* req) {
-            req->send(200, "application/json", "{\"ok\":true,\"msg\":\"Reconnecting...\"}");
-        },
-        nullptr,
-        [](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t, size_t) {
-            // In a full implementation: parse SSID/pass, call WiFi.begin(), update NVS
-            reporter_error("WIFI_CHANGE", "Runtime WiFi change requested (not yet implemented)");
+        String body = "";
+        if (request->hasParam("plain", true)) {
+            body = request->getParam("plain", true)->value();
         }
-    );
+        if (body.length() == 0 && request->hasParam("attack", true)) {
+            body = String("{\"attack\":\"") + request->getParam("attack", true)->value() + "\"}";
+        }
+        if (body.length() == 0) {
+            request->send(400, "application/json", "{\"error\":\"missing_body\"}");
+            return;
+        }
 
-    // 404 handler
-    _srv.onNotFound([](AsyncWebServerRequest* req) {
-        req->send(404, "application/json", "{\"error\":\"not_found\"}");
+        DynamicJsonDocument doc(256);
+        deserializeJson(doc, body);
+        const char* atk = doc["attack"];
+        if (!atk) {
+            request->send(400, "application/json", "{\"error\":\"missing_attack\"}");
+            return;
+        }
+
+        attack_running = true;
+        String a = String(atk);
+        xTaskCreate([](void* p) {
+            String attackName = *((String*)p);
+            delete (String*)p;
+            if (attackName == "dictionary" && g_dump_ptr) dictAttack_run((CardDump*)g_dump_ptr);
+            else if (attackName == "nested" && g_dump_ptr) nestedAttack_run((CardDump*)g_dump_ptr);
+            else if (attackName == "darkside" && g_dump_ptr) {
+                for (uint8_t s = 0; s < g_dump_ptr->totalSectors; s++) {
+                    if (!ks_isSectorKnown(g_dump_ptr, s)) darksideAttack_runSector((CardDump*)g_dump_ptr, s);
+                }
+            }
+            attack_running = false;
+            vTaskDelete(NULL);
+        }, "attack_task", 8 * 1024, new String(a), 1, NULL);
+
+        request->send(200, "application/json", String("{\"status\":\"queued\",\"attack\":\"") + atk + "\"}");
     });
 
-    _srv.begin();
-    // Register ourselves as an observer so every JSON event is broadcast
-    reporter_addObserver(webServer_broadcastEvent);
+    server->on("/api/dump", HTTP_GET, [](AsyncWebServerRequest *request) {
+        const char* p = dump_lastPath();
+        if (!p) {
+            request->send(404, "application/json", "{\"error\":\"no_dump\"}");
+            return;
+        }
+        File f = SD.open(p);
+        if (!f) {
+            request->send(500, "application/json", "{\"error\":\"file_open_failed\"}");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponseStream("application/octet-stream");
+        response->addHeader("Content-Disposition", String("attachment; filename=") + String(p));
+        uint8_t buf[256];
+        while (f.available()) {
+            size_t r = f.read(buf, sizeof(buf));
+            response->write(buf, r);
+        }
+        f.close();
+        request->send(response);
+    });
+
+    server->begin();
+    reporter_register_cb(_onReporter);
 }
+
+void webServer_setDump(const CardDump* d) { g_dump_ptr = d; }
