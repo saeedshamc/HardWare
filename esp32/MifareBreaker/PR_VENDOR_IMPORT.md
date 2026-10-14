@@ -5,7 +5,7 @@ Title: Import crapto1 (Crypto1) from Proxmark3 (GPL) — gpl-crypto1-import → 
 Body:
 
 Summary:
-This PR imports the crapto1 Crypto1 implementation from Proxmark3 into esp32/MifareBreaker/crypto/crapto1 to provide production-grade Crypto1 keystream implementation used by nested/darkside attacks.
+This PR imports the crapto1 Crypto1 implementation from Proxmark3 into esp32/MifareBreaker/crypto/crapto1 to provide a production-grade Crypto1 keystream implementation used by nested/darkside attacks.
 
 Upstream:
 - Repository: https://github.com/Proxmark/proxmark3

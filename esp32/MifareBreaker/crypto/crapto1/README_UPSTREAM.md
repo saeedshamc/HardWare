@@ -1,7 +1,7 @@
-Upstream project: Proxmark3
-URL: https://github.com/Proxmark/proxmark3
-Imported path: crapto1 (Crypto1 implementation)
-Upstream commit/tag: <PUT_COMMIT_SHA_OR_TAG_HERE>
-Upstream license: see COPYING in this folder (upstream GPL)
-Authors: see upstream AUTHORS and commit history
-Notes: This directory contains the crapto1 Crypto1 implementation imported from Proxmark3. Redistribution of combined artifacts must comply with the upstream GPL terms. Merging this branch into main implies acceptance of GPL obligations for the combined work.
+# Import helper for Proxmark3 crapto1 (Crypto1)
+
+This branch is intended to hold the vendored Crypto1 implementation (crapto1) imported from the upstream Proxmark3 repository. The import is intentionally isolated to this branch so the repository owner can review and accept license implications before merging to `main`.
+
+This helper does not include the upstream sources itself (to avoid large diffs in the web UI); use the script below to perform the import locally (it will create a single squashed commit). After running the script, push the branch and open a PR to main.
+
+Important: The upstream code is licensed under the GNU General Public License (GPL). By importing and merging this branch into `main` you accept the GPL obligations for the combined work. Do NOT merge until you confirm acceptance.
