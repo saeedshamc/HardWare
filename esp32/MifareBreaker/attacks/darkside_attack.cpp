@@ -15,7 +15,8 @@ void darksideAttack_runSector(CardDump* d, uint8_t sector) {
         {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
         {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7}
     };
-    for (int i=0;i< (int)(sizeof(builtin)/6); i++) {
+    size_t builtin_count = sizeof(builtin)/sizeof(builtin[0]);
+    for (size_t i=0;i<builtin_count;i++) {
         RC522Status st = picc_mfAuth(MF_AUTH_KEY_A, ks_sectorToTrailer(sector), builtin[i], &d->uid);
         if (st==RC522_OK) {
             uint8_t buf[16]; if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) {
@@ -35,9 +36,11 @@ void darksideAttack_runSector(CardDump* d, uint8_t sector) {
             size_t tried=0;
             while (f.available()) {
                 String line = f.readStringUntil('\n'); line.trim();
-                if (line.length()!=12) continue;
+                if (line.length()!=12) { tried++; continue; }
                 uint8_t key[6]; for (int i=0;i<6;i++) key[i] = (uint8_t) strtoul(line.substring(i*2, i*2+2).c_str(), NULL, 16);
-                reporter_error("DARKSIDE_PROGRESS", String("tried ") + String(tried) + "/" + String(total)).c_str();
+                char progress[64];
+                snprintf(progress, sizeof(progress), "tried %u/%u", (unsigned)tried, (unsigned)total);
+                reporter_error("DARKSIDE_PROGRESS", progress);
                 RC522Status st = picc_mfAuth(MF_AUTH_KEY_A, ks_sectorToTrailer(sector), key, &d->uid);
                 if (st==RC522_OK) { uint8_t buf[16]; if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) { ks_setKeyA(d, sector, key); reporter_keyFound(sector, "A", key, "darkside-dict"); picc_mfDeauth(); f.close(); return; } picc_mfDeauth(); }
                 st = picc_mfAuth(MF_AUTH_KEY_B, ks_sectorToTrailer(sector), key, &d->uid);

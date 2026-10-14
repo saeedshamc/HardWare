@@ -38,7 +38,8 @@ static void _tryKey(CardDump* d, uint8_t sector, const uint8_t* key, const char*
 void dictAttack_run(CardDump* d) {
     std::vector<KeyEntry> keys;
     // add builtin (non-owned)
-    for (size_t i=0;i<sizeof(BUILTIN_KEYS_ARR)/6;i++) {
+    size_t builtin_count = sizeof(BUILTIN_KEYS_ARR)/sizeof(BUILTIN_KEYS_ARR[0]);
+    for (size_t i=0;i<builtin_count;i++) {
         keys.push_back({(uint8_t*)BUILTIN_KEYS_ARR[i], (char*)BUILTIN_KEYS_HEX[i], false});
     }
     // add SD keys
@@ -76,13 +77,4 @@ void dictAttack_run(CardDump* d) {
     for (auto &ke: keys) {
         if (ke.owned) { free(ke.k); free(ke.hex); }
     }
-}
-
-void nestedAttack_run(CardDump* d) {
-    // Placeholder: real nested attack implementation requires Crypto1.
-    reporter_error("NESTED_TODO", "Nested attack not implemented — requires crypto1 integration");
-}
-
-void darksideAttack_runSector(CardDump* d, uint8_t sector) {
-    reporter_error("DARKSIDE_TODO", "Darkside attack not implemented — placeholder");
 }
