@@ -41,11 +41,26 @@ jobs:
 
       - name: Ensure gpl branch exists locally
         run: |
+          set -e
           BRANCH=gpl-crypto1-import
-          if git ls-remote --heads origin $BRANCH | grep -q $BRANCH; then
+
+          # if a path exists with same name, move it to backups to avoid ambiguity
+          if [ -e "$BRANCH" ]; then
+            echo "Warning: a file or folder named '$BRANCH' exists. Moving it to .github/workflows/_backups to avoid git name ambiguity."
+            mkdir -p .github/workflows/_backups
+            TIMESTAMP=$(date +%s)
+            mv "$BRANCH" ".github/workflows/_backups/${BRANCH}_backup_${TIMESTAMP}" || true
+            git rm -rf --cached "$BRANCH" || true
+          fi
+
+          git fetch origin
+
+          if git ls-remote --exit-code --heads origin $BRANCH >/dev/null 2>&1; then
+            echo "Remote branch origin/$BRANCH exists — setting local branch to track it."
+            git branch -f $BRANCH origin/$BRANCH
             git checkout $BRANCH
-            git pull origin $BRANCH
           else
+            echo "Remote branch origin/$BRANCH does not exist — creating new local branch and pushing it."
             git checkout -b $BRANCH
             git push origin $BRANCH
           fi
@@ -58,19 +73,21 @@ jobs:
           fi
           git fetch proxmark
 
-      - name: Import subtree (squash)
+      - name: Import upstream using clone & copy (robust fallback)
         run: |
+          set -e
           PREFIX="${{ github.event.inputs.vendor_prefix }}"
           UPSTREAM_REF="${{ github.event.inputs.proxmark_branch }}"
-          echo "Importing proxmark ${UPSTREAM_REF} into ${PREFIX}"
-          if [ -d "$PREFIX" ] && [ "$(ls -A $PREFIX 2>/dev/null)" ]; then
-            echo "Prefix already exists and not empty — trying git subtree pull (squash)"
-            git subtree pull --prefix=${PREFIX} proxmark ${UPSTREAM_REF} --squash || true
-          else
-            git subtree add --prefix=${PREFIX} proxmark ${UPSTREAM_REF} --squash || true
-          fi
-          git add -A ${PREFIX}
+          TMPDIR=$(mktemp -d)
+          echo "Cloning proxmark ${UPSTREAM_REF} into $TMPDIR"
+          git clone --depth 1 --branch "${UPSTREAM_REF}" https://github.com/Proxmark/proxmark3.git "$TMPDIR/proxmark3"
+          mkdir -p "$(dirname "${PREFIX}")"
+          rm -rf "${PREFIX}"
+          # copy proxmark repo contents (adjust if you want a subpath instead)
+          cp -a "$TMPDIR/proxmark3/." "${PREFIX}/"
+          git add -A "${PREFIX}"
           git commit -m "Import crapto1 (Crypto1) from Proxmark3 (upstream: proxmark/${UPSTREAM_REF})" || echo "No changes to commit"
+          rm -rf "$TMPDIR"
 
       - name: Push vendor branch
         run: |
