@@ -26,7 +26,7 @@ void setup() {
     }
 
     // SD Card (optional — dictionary and dumps disabled if absent)
-    if (!SD.begin(PIN_SS))
+    if (!SD.begin(SD_CS_PIN))
         reporter_error("SD_WARN", "SD card not found — using built-in dict only");
 
     // WiFi + Web Dashboard
