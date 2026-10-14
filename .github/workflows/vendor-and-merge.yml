@@ -1,0 +1,90 @@
+name: Vendor Proxmark3 and optional merge
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxmark_branch:
+        description: 'Proxmark3 upstream branch or tag to import'
+        required: true
+        default: 'master'
+      do_merge:
+        description: 'If "yes", merge the vendor branch into main after import'
+        required: true
+        default: 'no'
+      vendor_prefix:
+        description: 'Destination prefix in repo'
+        required: true
+        default: 'esp32/MifareBreaker/crypto/crapto1'
+
+jobs:
+  import_and_optional_merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (no credentials)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure git (use PAT for push)
+        env:
+          TOKEN: ${{ secrets.REPO_MERGE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "REPO_MERGE_TOKEN secret is not set. Aborting."
+            exit 1
+          fi
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/${{ github.repository }}
+          git config user.name "Repository Automation"
+          git config user.email "actions@github.com"
+          git fetch --all
+
+      - name: Ensure gpl branch exists locally
+        run: |
+          BRANCH=gpl-crypto1-import
+          if git ls-remote --heads origin $BRANCH | grep -q $BRANCH; then
+            git checkout $BRANCH
+            git pull origin $BRANCH
+          else
+            git checkout -b $BRANCH
+            git push origin $BRANCH
+          fi
+
+      - name: Add proxmark remote and fetch upstream
+        run: |
+          REPO_URL="https://github.com/Proxmark/proxmark3"
+          if ! git remote get-url proxmark >/dev/null 2>&1; then
+            git remote add proxmark $REPO_URL || true
+          fi
+          git fetch proxmark
+
+      - name: Import subtree (squash)
+        run: |
+          PREFIX="${{ github.event.inputs.vendor_prefix }}"
+          UPSTREAM_REF="${{ github.event.inputs.proxmark_branch }}"
+          echo "Importing proxmark ${UPSTREAM_REF} into ${PREFIX}"
+          if [ -d "$PREFIX" ] && [ "$(ls -A $PREFIX 2>/dev/null)" ]; then
+            echo "Prefix already exists and not empty — trying git subtree pull (squash)"
+            git subtree pull --prefix=${PREFIX} proxmark ${UPSTREAM_REF} --squash || true
+          else
+            git subtree add --prefix=${PREFIX} proxmark ${UPSTREAM_REF} --squash || true
+          fi
+          git add -A ${PREFIX}
+          git commit -m "Import crapto1 (Crypto1) from Proxmark3 (upstream: proxmark/${UPSTREAM_REF})" || echo "No changes to commit"
+
+      - name: Push vendor branch
+        run: |
+          BRANCH=gpl-crypto1-import
+          git push origin HEAD:$BRANCH
+
+      - name: Optionally merge into main
+        if: ${{ github.event.inputs.do_merge == 'yes' }}
+        run: |
+          git checkout main
+          git pull origin main
+          git merge --no-ff gpl-crypto1-import -m "Merge gpl-crypto1-import: import crapto1 from proxmark (automated)"
+          git push origin main
+
+      - name: Output success message
+        run: |
+          echo "Import finished. If do_merge=yes, gpl-crypto1-import has been merged into main."
