@@ -10,6 +10,7 @@
 #include "attacks/nested_attack.h"
 #include "attacks/darkside_attack.h"
 #include "storage/dump_manager.h"
+#include "storage/sd_helper.h"
 
 static CardDump g_dump;
 
@@ -26,7 +27,7 @@ void setup() {
     }
 
     // SD Card (optional — dictionary and dumps disabled if absent)
-    if (!SD.begin(SD_CS_PIN))
+    if (!sd_init())
         reporter_error("SD_WARN", "SD card not found — using built-in dict only");
 
     // WiFi + Web Dashboard
