@@ -2,7 +2,9 @@
 #include "hal/card_comm.h"
 #include "core/key_store.h"
 #include "output/serial_reporter.h"
+#include "storage/sd_helper.h"
 #include "config.h"
+#include <SD.h>
 #include <vector>
 #include <stdlib.h>
 #include <string.h>
@@ -50,7 +52,7 @@ void nestedAttack_run(CardDump* d) {
     for (int i=0;i<6;i++) kff[i] = (uint8_t)(baseKey[i] ^ 0xFF);
     candidates.push_back(kff);
 
-    if (SD.begin(SD_CS_PIN)) {
+    if (sd_is_available()) {
         File f = SD.open(DICT_PATH);
         if (f) {
             while (f.available()) {
@@ -58,6 +60,7 @@ void nestedAttack_run(CardDump* d) {
                 line.trim();
                 if (line.length()==12) {
                     uint8_t* kop = (uint8_t*)malloc(6);
+                    if (!kop) break;
                     for (int i=0;i<6;i++) kop[i] = (uint8_t) strtoul(line.substring(i*2, i*2+2).c_str(), NULL, 16);
                     candidates.push_back(kop);
                 }

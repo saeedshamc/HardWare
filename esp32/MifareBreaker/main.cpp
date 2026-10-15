@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <SD.h>
 #include "config.h"
 #include "hal/rc522_driver.h"
 #include "core/uid_reader.h"
@@ -10,6 +9,7 @@
 #include "attacks/nested_attack.h"
 #include "attacks/darkside_attack.h"
 #include "storage/dump_manager.h"
+#include "storage/sd_helper.h"
 
 static CardDump g_dump;
 
@@ -25,8 +25,8 @@ void setup() {
         while (true) delay(1000);
     }
 
-    // SD Card (optional — dictionary and dumps disabled if absent)
-    if (!SD.begin(SD_CS_PIN))
+    // SD once at boot (optional — dictionary and dumps use built-in list if absent)
+    if (!sd_init())
         reporter_error("SD_WARN", "SD card not found — using built-in dict only");
 
     // WiFi + Web Dashboard

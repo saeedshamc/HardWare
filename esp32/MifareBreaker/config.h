@@ -2,9 +2,13 @@
 
 #include <stdint.h>
 
-// ─── WiFi ───────────────────────────────────────────────────────────
-#define WIFI_SSID               "your_ssid"
-#define WIFI_PASS               "your_password"
+// ─── WiFi (edit before flash; do not commit real passwords) ─────────
+#ifndef WIFI_SSID
+#define WIFI_SSID               "YOUR_WIFI_SSID"
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS               "YOUR_WIFI_PASSWORD"
+#endif
 
 // ─── Serial ─────────────────────────────────────────────────────────
 #define SERIAL_BAUD             115200
@@ -19,9 +23,9 @@
 // SD card CS pin (use a separate CS for SD to avoid conflict with RC522)
 #define SD_CS_PIN               4
 
-// ─── Storage ─────────────────────────────────────────────────────────
-#define DICT_PATH               "/sdcard/keys.txt"
-#define DUMP_PATH_PREFIX        "/sdcard/"
+// ─── Storage (Arduino SD paths are root-relative, e.g. "/keys.txt") ──
+#define DICT_PATH               "/keys.txt"
+#define DUMP_PATH_PREFIX        "/"
 
 // ─── Attack Tuning ───────────────────────────────────────────────────
 #define ATTACK_TIMEOUT_MS       30000

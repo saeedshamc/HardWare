@@ -22,7 +22,7 @@ Follow these steps to test the firmware on an ESP32 DevKit WROOM with RC522 and 
    - Arduino IDE: use "ESP32 Sketch Data Upload" plugin
 
 5. Prepare SD
-   - Place keys_sample.txt (or your own keys.txt) at root of SD (path: /sdcard/keys.txt)
+   - Place keys on SD root as `/keys.txt` (copy from `data/keys_sample.txt`)
 
 6. Run & Monitor
    - Open serial monitor at 115200

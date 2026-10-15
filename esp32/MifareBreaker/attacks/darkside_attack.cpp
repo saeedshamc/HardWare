@@ -2,9 +2,11 @@
 #include "hal/card_comm.h"
 #include "core/key_store.h"
 #include "output/serial_reporter.h"
+#include "storage/sd_helper.h"
 #include "config.h"
 #include <SD.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 void darksideAttack_runSector(CardDump* d, uint8_t sector) {
     reporter_attackStart("darkside", sector, "A/B");
@@ -44,7 +46,7 @@ void darksideAttack_runSector(CardDump* d, uint8_t sector) {
         }
     }
 
-    if (SD.begin(SD_CS_PIN)) {
+    if (sd_is_available()) {
         File f = SD.open(DICT_PATH);
         if (f) {
             size_t total = 0;

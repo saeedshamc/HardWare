@@ -5,3 +5,8 @@
 *.elf
 *.zip
 .DS_Store
+__pycache__/
+*.pyc
+# local secrets overrides (if you create them)
+config.local.h
+secrets.h
