@@ -39,8 +39,21 @@
 #define BLOCK_SIZE              16
 
 // ─── Hardware ───────────────────────────────────────────────────────
+// Set true and wire SSD1306 on I2C (default SDA=21, SCL=25 — avoid RC522 RST on 22)
 #define USE_DISPLAY             false
+#ifndef DISPLAY_SDA
+#define DISPLAY_SDA             21
+#endif
+#ifndef DISPLAY_SCL
+#define DISPLAY_SCL             25
+#endif
+#ifndef DISPLAY_ADDR
+#define DISPLAY_ADDR            0x3C
+#endif
 #define SPI_FREQ                1000000
+
+// NVS namespace for runtime WiFi overrides (POST /api/wifi)
+#define WIFI_NVS_NAMESPACE      "mfb_wifi"
 
 // ─── Debug ──────────────────────────────────────────────────────────
 #define DEBUG_MODE              false

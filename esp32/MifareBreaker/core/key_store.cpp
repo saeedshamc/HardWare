@@ -1,4 +1,5 @@
 #include "key_store.h"
+#include "core/sector_manager.h"
 #include <string.h>
 
 void ks_init(CardDump* d) {
@@ -26,6 +27,5 @@ uint8_t ks_countCracked(const CardDump* d) {
     for(uint8_t i=0;i<d->totalSectors;i++) if(ks_isSectorKnown(d,i)) n++;
     return n;
 }
-// 1K: sectors 0-15 → 4 blocks each;  4K: sectors 32-39 → 16 blocks each
-uint8_t ks_sectorToFirstBlock(uint8_t s) { return s<32 ? s*4 : 128+(s-32)*16; }
-uint8_t ks_sectorToTrailer(uint8_t s)    { return s<32 ? s*4+3 : 128+(s-32)*16+15; }
+uint8_t ks_sectorToFirstBlock(uint8_t s) { return sm_sectorToFirstBlock(s); }
+uint8_t ks_sectorToTrailer(uint8_t s)    { return sm_sectorToTrailer(s); }

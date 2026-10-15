@@ -30,6 +30,12 @@ body{font-family:system-ui,monospace;background:#0f1720;color:#cbd5e1;margin:0;p
       <button id=btnDark class=button onclick="start('darkside')">▶ Darkside</button>
     </div>
     <div class=tile><button class=button onclick="downloadDump()">⬇ Download Dump</button></div>
+    <div class=tile>
+      <div class=small>WiFi (saved to NVS)</div>
+      <input id=wifiSsid placeholder="SSID" style="width:100%;margin:4px 0;background:#111;color:#fff;border:1px solid #333;padding:4px">
+      <input id=wifiPass type=password placeholder="Password" style="width:100%;margin:4px 0;background:#111;color:#fff;border:1px solid #333;padding:4px">
+      <button class=button onclick="saveWifi()">Save WiFi</button>
+    </div>
     <div class=tile><div class=grid id=sectors></div></div>
   </div>
   <div id=right>
@@ -51,8 +57,21 @@ function handleEvent(e){ if(e.event==='card_detected'){ document.getElementById(
 function buildGrid(n){ let g=document.getElementById('sectors'); g.innerHTML=''; for(let i=0;i<n;i++){ let s=document.createElement('div'); s.id='s'+i; s.className='sector gray'; s.innerText='S'+(i<10?'0':'')+i; g.appendChild(s);} }
 function start(attack){ if(attackRunning) return; fetch('/api/attack',{method:'POST', body: JSON.stringify({attack:attack}), headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(j=>{ log('[api] '+JSON.stringify(j)); if(j.status=='queued') attackRunning=true; updateButtons(); }); }
 function downloadDump(){ window.location='/api/dump'; }
+function saveWifi(){
+  const ssid=document.getElementById('wifiSsid').value;
+  const pass=document.getElementById('wifiPass').value;
+  fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass})})
+    .then(r=>r.json()).then(j=>log('[wifi] '+JSON.stringify(j)));
+}
 function updateButtons(){ document.getElementById('btnDict').disabled=attackRunning; document.getElementById('btnNested').disabled=attackRunning; document.getElementById('btnDark').disabled=attackRunning; }
-function fetchStatus(){ fetch('/api/status').then(r=>r.json()).then(j=>{ if(j.uid) document.getElementById('info').innerText='UID:'+j.uid; if(j.sectors) buildGrid(j.sectors_total||j.sectors); if(j.sectors){ j.sectors.forEach(s=>{ let el=document.getElementById('s'+s.sector); if(!el) return; if(s.keyA_status==1 || s.keyB_status==1) el.className='sector green'; else if(s.keyA_status==2 || s.keyB_status==2) el.className='sector red'; else if(s.data_read) el.className='sector yellow'; else el.className='sector gray'; el.title = JSON.stringify(s); }); } }); }
+function fetchStatus(){ fetch('/api/status').then(r=>r.json()).then(j=>{
+  let info='';
+  if(j.uid) info+='UID:'+j.uid+' ';
+  if(j.ip) info+='IP:'+j.ip;
+  if(info) document.getElementById('info').innerText=info;
+  if(j.sectors_total && !document.getElementById('s0')) buildGrid(j.sectors_total);
+  if(j.sectors){ j.sectors.forEach(s=>{ let el=document.getElementById('s'+s.sector); if(!el) return; if(s.keyA_status==1 || s.keyB_status==1) el.className='sector green'; else if(s.keyA_status==2 || s.keyB_status==2) el.className='sector red'; else if(s.data_read) el.className='sector yellow'; else el.className='sector gray'; el.title = JSON.stringify(s); }); }
+}); }
 connect();
 setInterval(fetchStatus, 3000);
 </script>

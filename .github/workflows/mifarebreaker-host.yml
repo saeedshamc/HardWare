@@ -1,0 +1,22 @@
+name: MifareBreaker host tests
+
+on:
+  push:
+    paths:
+      - "esp32/MifareBreaker/**"
+      - ".github/workflows/mifarebreaker-host.yml"
+  pull_request:
+    paths:
+      - "esp32/MifareBreaker/**"
+      - ".github/workflows/mifarebreaker-host.yml"
+
+jobs:
+  sector-manager:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & run sector_manager host test
+        run: |
+          cc -O2 -Wall -Wextra -o test_sector_manager \
+            esp32/MifareBreaker/tests/host/test_sector_manager.c
+          ./test_sector_manager
