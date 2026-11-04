@@ -18,6 +18,8 @@ static AsyncWebServer* server = nullptr;
 static AsyncWebSocket* ws = nullptr;
 static const CardDump* g_dump_ptr = nullptr;
 static bool attack_running = false;
+
+bool webServer_isAttackRunning(void) { return attack_running; }
 static Preferences g_wifiPrefs;
 static String g_wifiSsid;
 static String g_wifiPass;
@@ -207,31 +209,22 @@ void webServer_init(void) {
                 }
                 attack_running = false;
                 vTaskDelete(NULL);
-            }, "attack_task", 8 * 1024, new String(a), 1, NULL);
+            }, "attack_task", 16 * 1024, new String(a), 1, NULL);
 
             request->send(200, "application/json", String("{\"status\":\"queued\",\"attack\":\"") + atk + "\"}");
         });
 
     server->on("/api/dump", HTTP_GET, [](AsyncWebServerRequest *request) {
         const char* p = dump_lastPath();
-        if (!p) {
-            request->send(404, "application/json", "{\"error\":\"no_dump\"}");
+        if (!p || !SD.exists(p)) {
+            request->send(404, "application/json", "{\"error\":\"no_dump_available\"}");
             return;
         }
-        File f = SD.open(p);
-        if (!f) {
-            request->send(500, "application/json", "{\"error\":\"file_open_failed\"}");
-            return;
-        }
-        AsyncWebServerResponse* response = request->beginResponseStream("application/octet-stream");
-        response->addHeader("Content-Disposition", String("attachment; filename=") + String(p));
-        uint8_t buf[256];
-        while (f.available()) {
-            size_t r = f.read(buf, sizeof(buf));
-            response->write(buf, r);
-        }
-        f.close();
-        request->send(response);
+        AsyncWebServerResponse* rsp = request->beginResponse(
+            SD, p, "application/octet-stream", true);
+        rsp->addHeader("Content-Disposition",
+            "attachment; filename=\"dump.mfd\"");
+        request->send(rsp);
     });
 
     server->begin();

@@ -99,9 +99,11 @@ ESP32 یک SoC دو هسته‌ای با وای‌فای و بلوتوث است�
 | پوشه | توضیح |
 |------|--------|
 | [hozur-attendance](./hozur-attendance/) | سیستم حضور و غیاب RFID (ESP32 + Django) |
-| [MifareNestedAttack](./MifareNestedAttack/) | آزمایشگاه آموزشی امنیت MIFARE Classic (ESP32 + RC522) |
+| [MifareBreaker](./MifareBreaker/) | فریم‌ویر آزمایشگاهی ESP32+RC522 (دیکشنری، داشبورد وب، دامپ SD) |
 | [MifareKeyLab](./MifareKeyLab/) | آزمایشگاه تست کلید کاندید MIFARE (CLI پایتون + ESP32) |
-| [MifareBreaker](./MifareBreaker/) | فریم‌ویر ممیزی ESP32+RC522 (دیکشنری + داشبورد) |
+| [MifareNestedAttack](./MifareNestedAttack/) | آزمایشگاه آموزشی مفاهیم MIFARE Classic (شبیه‌ساز) |
+| [ESP32_CarGame](./ESP32_CarGame/) | بازی ماشین |
+| [ESP32_ShieldGame](./ESP32_ShieldGame/) | بازی شیلد |
 
 ## محیط توسعه
 

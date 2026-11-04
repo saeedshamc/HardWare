@@ -1,79 +1,319 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>MifareBreaker Dashboard</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MifareBreaker</title>
 <style>
-body{font-family:system-ui,monospace;background:#0f1720;color:#cbd5e1;margin:0;padding:0}
-#app{display:flex;height:100vh}
-#left{width:260px;padding:12px;border-right:1px solid #102;}
-#right{flex:1;padding:12px}
-.tile{background:#111827;padding:8px;margin:6px;border-radius:6px}
-.log{background:#0b1220;padding:8px;height:70vh;overflow:auto;border-radius:6px}
-.button{background:#0b84ff;color:#fff;padding:6px 10px;border-radius:4px;border:none;margin-right:6px}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.sector{background:#222;padding:8px;border-radius:4px;text-align:center;color:#fff}
-.green{background:#064e3b}
-.yellow{background:#92400e}
-.red{background:#7f1d1d}
-.gray{background:#374151}
-.small{font-size:12px;color:#9ca3af}
+:root{--bg:#0d1117;--sur:#161b22;--bdr:#30363d;--txt:#c9d1d9;--dim:#8b949e;
+  --grn:#3fb950;--yel:#e3b341;--red:#f85149;--blu:#58a6ff;--pur:#bc8cff;
+  --ora:#f0883e;--mono:'Courier New',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:13px;
+  display:flex;flex-direction:column;height:100vh}
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;background:var(--sur);border-bottom:1px solid var(--bdr);flex-shrink:0}
+header h1{font-size:14px;letter-spacing:2px;color:var(--blu)}
+#dot{width:8px;height:8px;border-radius:50%;background:var(--red);
+  display:inline-block;margin-right:6px;transition:background .3s}
+#dot.on{background:var(--grn)}
+/* Main layout */
+main{display:flex;flex:1;overflow:hidden}
+/* Left: sector grid */
+aside{width:200px;flex-shrink:0;border-right:1px solid var(--bdr);
+  overflow-y:auto;padding:10px}
+aside h2{font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:8px}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
+.tile{aspect-ratio:1;border-radius:3px;border:1px solid var(--bdr);
+  background:var(--sur);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:9px;color:var(--dim);transition:all .2s}
+.tile:hover{border-color:var(--blu)}
+.tile.cracked{background:#1a3a1f;border-color:var(--grn);color:var(--grn)}
+.tile.partial{background:#3a2e0a;border-color:var(--yel);color:var(--yel)}
+.tile.failed {background:#3a0f0f;border-color:var(--red);color:var(--red)}
+.tile.active {animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* Legend */
+.leg{margin-top:8px;font-size:10px;color:var(--dim);line-height:1.8}
+/* Right panel */
+section{flex:1;display:flex;flex-direction:column;overflow:hidden}
+/* Info bar */
+#info{padding:7px 12px;background:var(--sur);border-bottom:1px solid var(--bdr);
+  display:flex;gap:20px;flex-shrink:0;align-items:center;flex-wrap:wrap}
+.iv{display:flex;flex-direction:column}
+.il{font-size:9px;color:var(--dim);letter-spacing:1px}
+.iv2{font-size:12px;color:var(--txt)}
+#pbar-wrap{flex:1;min-width:80px}
+#pbar{height:3px;background:var(--grn);width:0;transition:width .4s;border-radius:2px}
+/* Detail */
+#det{padding:8px 12px;border-bottom:1px solid var(--bdr);
+  background:var(--bg);flex-shrink:0;min-height:74px}
+#det-title{font-size:10px;color:var(--dim);margin-bottom:4px}
+#det-body{font-size:11px;color:var(--txt);white-space:pre;line-height:1.6;
+  overflow-x:auto}
+/* Log */
+#log-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
+#log-hdr{font-size:10px;color:var(--dim);padding:6px 12px 3px;
+  border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between}
+#log{flex:1;overflow-y:auto;padding:4px 12px;font-size:11px;line-height:1.7}
+.le{display:flex;gap:6px;align-items:baseline}
+.lt{color:var(--dim);flex-shrink:0}
+.lv{flex-shrink:0}
+.lm{color:var(--dim)}
+.ev-key_found{color:var(--grn)}.ev-card_detected{color:var(--blu)}
+.ev-attack_start{color:var(--yel)}.ev-key_failed{color:var(--red)}
+.ev-data_read{color:var(--pur)}.ev-attack_summary{color:var(--ora)}
+.ev-error{color:var(--red)}.ev-dump_saved{color:var(--grn)}
+/* Controls */
+#ctrl{padding:8px 12px;border-top:1px solid var(--bdr);
+  background:var(--sur);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.btn{padding:5px 11px;border-radius:3px;border:1px solid var(--bdr);
+  background:var(--sur);color:var(--txt);cursor:pointer;
+  font-family:var(--mono);font-size:11px;transition:all .15s}
+.btn:hover:not(:disabled){border-color:var(--blu);color:var(--blu)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-b{border-color:var(--blu);color:var(--blu)}
+.btn-r{border-color:var(--red);color:var(--red)}
+.btn-g{border-color:var(--grn);color:var(--grn)}
 </style>
 </head>
 <body>
-<div id=app>
-  <div id=left>
-    <div class=tile><h3>MifareBreaker</h3><div id=info class=small>Connecting...</div></div>
-    <div class=tile>
-      <button id=btnDict class=button onclick="start('dictionary')">▶ Dictionary</button>
-      <button id=btnNested class=button onclick="start('nested')">▶ Nested</button>
-      <button id=btnDark class=button onclick="start('darkside')">▶ Darkside</button>
-    </div>
-    <div class=tile><button class=button onclick="downloadDump()">⬇ Download Dump</button></div>
-    <div class=tile>
-      <div class=small>WiFi (saved to NVS)</div>
-      <input id=wifiSsid placeholder="SSID" style="width:100%;margin:4px 0;background:#111;color:#fff;border:1px solid #333;padding:4px">
-      <input id=wifiPass type=password placeholder="Password" style="width:100%;margin:4px 0;background:#111;color:#fff;border:1px solid #333;padding:4px">
-      <button class=button onclick="saveWifi()">Save WiFi</button>
-    </div>
-    <div class=tile><div class=grid id=sectors></div></div>
+<header>
+  <h1>&#9889; MifareBreaker</h1>
+  <div id="ws-info">
+    <span id="dot"></span><span id="ws-txt">Disconnected</span>
+    &nbsp;&nbsp;<span id="atk-badge" style="color:var(--yel);display:none"></span>
   </div>
-  <div id=right>
-    <div class=tile><h4>Live Log</h4><div id=log class=log></div></div>
-  </div>
-</div>
+</header>
+<main>
+  <aside>
+    <h2>SECTOR MAP</h2>
+    <div id="grid"></div>
+    <div class="leg">
+      <div><span style="color:var(--grn)">&#9632;</span> Cracked</div>
+      <div><span style="color:var(--yel)">&#9632;</span> Partial</div>
+      <div><span style="color:var(--red)">&#9632;</span> Failed</div>
+      <div><span style="color:var(--bdr)">&#9632;</span> Unknown</div>
+    </div>
+  </aside>
+  <section>
+    <div id="info">
+      <div class="iv"><span class="il">UID</span><span class="iv2" id="i-uid">&#8212;</span></div>
+      <div class="iv"><span class="il">TYPE</span><span class="iv2" id="i-type">&#8212;</span></div>
+      <div class="iv"><span class="il">CRACKED</span><span class="iv2" id="i-crack">0/0</span></div>
+      <div class="iv" style="flex:1">
+        <span class="il">PROGRESS</span>
+        <div id="pbar-wrap"><div id="pbar"></div></div>
+      </div>
+    </div>
+    <div id="det">
+      <div id="det-title">SECTOR DETAIL &#8212; click a tile to inspect</div>
+      <div id="det-body" style="color:var(--dim)">No sector selected</div>
+    </div>
+    <div id="log-wrap">
+      <div id="log-hdr">
+        <span>LIVE LOG &nbsp;<span id="log-n" style="color:var(--dim)">0 events</span></span>
+        <span id="ip-lbl" style="color:var(--dim)"></span>
+      </div>
+      <div id="log"></div>
+    </div>
+    <div id="ctrl">
+      <button class="btn btn-b" id="b-dict"  onclick="atk('dictionary')">&#9654; Dictionary</button>
+      <button class="btn btn-b" id="b-nest"  onclick="atk('nested')">&#9654; Nested</button>
+      <button class="btn btn-r" id="b-dark"  onclick="atk('darkside')">&#9654; Darkside</button>
+      <button class="btn btn-g" id="b-dump"  onclick="dlDump()">&#11015; Dump</button>
+      <button class="btn"       onclick="clearLog()">&#10005; Clear Log</button>
+      <button class="btn"       onclick="fetchStatus()">&#8635; Refresh</button>
+    </div>
+  </section>
+</main>
 <script>
-let ws; let attackRunning=false;
-function connect(){
-  ws = new WebSocket('ws://'+location.host+'/ws');
-  ws.onopen = ()=> { log('[WS] connected'); fetchStatus(); };
-  ws.onmessage = (m)=> {
-    try{ let j=JSON.parse(m.data); handleEvent(j);}catch(e){ log('[raw] '+m.data); }
-  };
-  ws.onclose = ()=> setTimeout(connect,2000);
+const st = {
+  sectors:{}, uid:'&#8212;', type:'&#8212;', total:0, cracked:0,
+  atkRunning:false, logN:0, selectedSector:null
+};
+let ws=null, wsTimer=null;
+
+function init(){fetchStatus(); connectWS();}
+
+function fetchStatus(){
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    if(d.uid){ st.uid=d.uid; st.type=d.type||'&#8212;';
+      st.total=d.sectors_total||0; st.cracked=d.cracked||0;
+      if(d.ip) document.getElementById('ip-lbl').textContent='http://'+d.ip;
+    }
+    if(d.sectors){
+      d.sectors.forEach(s=>{
+        if(!st.sectors[s.sector]) st.sectors[s.sector]={blocks:{}};
+        const r=st.sectors[s.sector];
+        r.statusA=s.keyA_status; r.statusB=s.keyB_status;
+        if(s.keyA) r.keyA=s.keyA;
+        if(s.keyB) r.keyB=s.keyB;
+        r.dataRead=s.data_read;
+      });
+    }
+    buildGrid(st.total); updateInfo();
+  }).catch(()=>{});
 }
-function log(s){ let el=document.getElementById('log'); el.innerText = (new Date().toLocaleTimeString())+" " + s+"\n" + el.innerText; }
-function handleEvent(e){ if(e.event==='card_detected'){ document.getElementById('info').innerText='UID:'+e.data.uid; buildGrid(e.data.sectors); } if(e.event==='attack_start'){ attackRunning=true; updateButtons(); log('[attack_start] '+JSON.stringify(e.data)); } if(e.event==='attack_summary'){ attackRunning=false; updateButtons(); log('[attack_summary] '+JSON.stringify(e.data)); } if(e.event==='dump_saved'){ log('[dump] '+e.data.path); } if(e.event==='key_found'){ log('[key_found] S'+(e.data.sector<10?'0':'')+e.data.sector+' '+e.data.key_type+': '+e.data.key); fetchStatus(); } else log(JSON.stringify(e)); }
-function buildGrid(n){ let g=document.getElementById('sectors'); g.innerHTML=''; for(let i=0;i<n;i++){ let s=document.createElement('div'); s.id='s'+i; s.className='sector gray'; s.innerText='S'+(i<10?'0':'')+i; g.appendChild(s);} }
-function start(attack){ if(attackRunning) return; fetch('/api/attack',{method:'POST', body: JSON.stringify({attack:attack}), headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(j=>{ log('[api] '+JSON.stringify(j)); if(j.status=='queued') attackRunning=true; updateButtons(); }); }
-function downloadDump(){ window.location='/api/dump'; }
-function saveWifi(){
-  const ssid=document.getElementById('wifiSsid').value;
-  const pass=document.getElementById('wifiPass').value;
-  fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass})})
-    .then(r=>r.json()).then(j=>log('[wifi] '+JSON.stringify(j)));
+
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(proto+'://'+location.host+'/ws');
+  ws.onopen=()=>{setConn(true); if(wsTimer){clearInterval(wsTimer);wsTimer=null;}};
+  ws.onclose=()=>{setConn(false); if(!wsTimer) wsTimer=setInterval(connectWS,3000);};
+  ws.onmessage=e=>{try{handleEv(JSON.parse(e.data));}catch(x){}};
 }
-function updateButtons(){ document.getElementById('btnDict').disabled=attackRunning; document.getElementById('btnNested').disabled=attackRunning; document.getElementById('btnDark').disabled=attackRunning; }
-function fetchStatus(){ fetch('/api/status').then(r=>r.json()).then(j=>{
-  let info='';
-  if(j.uid) info+='UID:'+j.uid+' ';
-  if(j.ip) info+='IP:'+j.ip;
-  if(info) document.getElementById('info').innerText=info;
-  if(j.sectors_total && !document.getElementById('s0')) buildGrid(j.sectors_total);
-  if(j.sectors){ j.sectors.forEach(s=>{ let el=document.getElementById('s'+s.sector); if(!el) return; if(s.keyA_status==1 || s.keyB_status==1) el.className='sector green'; else if(s.keyA_status==2 || s.keyB_status==2) el.className='sector red'; else if(s.data_read) el.className='sector yellow'; else el.className='sector gray'; el.title = JSON.stringify(s); }); }
-}); }
-connect();
-setInterval(fetchStatus, 3000);
+function setConn(ok){
+  document.getElementById('dot').className=ok?'on':'';
+  document.getElementById('ws-txt').textContent=ok?'Connected':'Disconnected';
+}
+
+function handleEv(ev){
+  addLog(ev);
+  const d=ev.data||{};
+  switch(ev.event){
+    case 'card_detected':
+      st.uid=d.uid||'&#8212;'; st.type=d.type||'&#8212;';
+      st.total=d.sectors||0; st.cracked=0; st.sectors={};
+      for(let i=0;i<st.total;i++) st.sectors[i]={blocks:{}};
+      buildGrid(st.total); updateInfo(); break;
+    case 'attack_start':
+      tileCls(d.sector,'active'); st.atkRunning=true; updBtns();
+      document.getElementById('atk-badge').textContent='['+d.attack+' S'+d.sector+']';
+      document.getElementById('atk-badge').style.display='';
+      break;
+    case 'key_found':
+      {const s=st.sectors[d.sector]||(st.sectors[d.sector]={blocks:{}});
+      if(d.key_type==='A'){s.keyA=d.key;s.statusA=1;}
+      else{s.keyB=d.key;s.statusB=1;}
+      updTile(d.sector);
+      st.cracked=Object.values(st.sectors).filter(x=>x.statusA===1||x.statusB===1).length;
+      updateInfo(); if(st.selectedSector===d.sector) showDet(d.sector);}
+      break;
+    case 'key_failed':
+      {const s=st.sectors[d.sector]||(st.sectors[d.sector]={blocks:{}});
+      if(d.key_type==='A') s.statusA=2; else s.statusB=2;
+      updTile(d.sector);} break;
+    case 'data_read':
+      {const s=st.sectors[d.sector]||(st.sectors[d.sector]={blocks:{}});
+      s.blocks[d.block]=d.hex;
+      if(st.selectedSector===d.sector) showDet(d.sector);} break;
+    case 'attack_summary':
+      st.atkRunning=false; updBtns();
+      document.getElementById('atk-badge').style.display='none';
+      Object.keys(st.sectors).forEach(i=>updTile(Number(i)));
+      break;
+  }
+}
+
+/* Grid */
+function buildGrid(n){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  for(let i=0;i<n;i++){
+    const t=document.createElement('div');
+    t.className='tile'; t.id='t'+i;
+    t.textContent='S'+String(i).padStart(2,'0');
+    t.onclick=()=>showDet(i); g.appendChild(t);
+  }
+}
+function tileCls(i,c){const t=document.getElementById('t'+i); if(t) t.className='tile '+c;}
+function updTile(i){
+  const s=st.sectors[i]; if(!s) return;
+  const a=s.statusA===1,b=s.statusB===1,fa=s.statusA===2,fb=s.statusB===2;
+  const c=(a&&b)?'cracked':(a||b)?'partial':(fa&&fb)?'failed':'';
+  tileCls(i,c);
+}
+function showDet(i){
+  st.selectedSector=i;
+  const s=st.sectors[i]||{};
+  let t='Sector '+i+'
+';
+  t+='  Key A : '+(s.keyA||'????????????')+'
+';
+  t+='  Key B : '+(s.keyB||'????????????')+'
+';
+  const blks=s.blocks||{};
+  if(Object.keys(blks).length){
+    t+='
+  Data blocks:
+';
+    Object.keys(blks).sort((a,b)=>a-b).forEach(b=>{
+      t+='  [B'+b+'] '+blks[b]+'
+';
+    });
+  }
+  document.getElementById('det-title').textContent='SECTOR DETAIL — S'+String(i).padStart(2,'0');
+  document.getElementById('det-body').textContent=t;
+}
+
+/* Info bar */
+function updateInfo(){
+  document.getElementById('i-uid').innerHTML=st.uid;
+  document.getElementById('i-type').textContent=st.type;
+  document.getElementById('i-crack').textContent=st.cracked+'/'+st.total;
+  const p=st.total?(st.cracked/st.total*100):0;
+  document.getElementById('pbar').style.width=p+'%';
+}
+
+/* Log */
+const EV_COL={
+  key_found:'ev-key_found',card_detected:'ev-card_detected',
+  attack_start:'ev-attack_start',key_failed:'ev-key_failed',
+  data_read:'ev-data_read',attack_summary:'ev-attack_summary',
+  error:'ev-error',dump_saved:'ev-dump_saved'
+};
+function fmtMsg(t,d){
+  if(t==='key_found')      return 'S'+d.sector+' Key'+d.key_type+': '+d.key+' ('+d.method+')';
+  if(t==='key_failed')     return 'S'+d.sector+' Key'+d.key_type+' not found';
+  if(t==='card_detected')  return d.uid+' '+d.type+' ('+d.sectors+' sectors)';
+  if(t==='attack_start')   return d.attack+' → S'+d.sector+' Key'+d.key_type;
+  if(t==='attack_summary') return 'Done: '+d.cracked+'/'+d.total_sectors+' cracked in '+(d.elapsed_ms/1000).toFixed(1)+'s';
+  if(t==='data_read')      return 'S'+d.sector+' B'+d.block+': '+d.hex;
+  if(t==='error')          return '['+d.code+'] '+d.msg;
+  if(t==='dump_saved')     return 'Saved → '+d.path;
+  return JSON.stringify(d).substring(0,80);
+}
+function addLog(ev){
+  const log=document.getElementById('log');
+  const now=new Date();
+  const ts=now.getHours().toString().padStart(2,'0')+':'
+           +now.getMinutes().toString().padStart(2,'0')+':'
+           +now.getSeconds().toString().padStart(2,'0');
+  const e=document.createElement('div'); e.className='le';
+  const t=document.createElement('span'); t.className='lt'; t.textContent=ts;
+  const v=document.createElement('span'); v.className='lv '+(EV_COL[ev.event]||'');
+  v.textContent='['+ev.event+']';
+  const m=document.createElement('span'); m.className='lm';
+  m.textContent=' '+fmtMsg(ev.event,ev.data||{});
+  e.appendChild(t); e.appendChild(v); e.appendChild(m);
+  log.appendChild(e); log.scrollTop=log.scrollHeight;
+  st.logN++;
+  document.getElementById('log-n').textContent=st.logN+' events';
+}
+function clearLog(){
+  document.getElementById('log').innerHTML='';
+  st.logN=0; document.getElementById('log-n').textContent='0 events';
+}
+
+/* Controls */
+function atk(type){
+  if(st.atkRunning) return;
+  fetch('/api/attack',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({attack:type})
+  }).then(r=>r.json()).then(d=>{
+    if(d.status==='queued'){st.atkRunning=true;updBtns();}
+  });
+}
+function dlDump(){ window.location.href='/api/dump'; }
+function updBtns(){
+  ['b-dict','b-nest','b-dark'].forEach(id=>{
+    document.getElementById(id).disabled=st.atkRunning;
+  });
+}
+
+init();
 </script>
 </body>
 </html>

@@ -31,16 +31,19 @@ void setup() {
     webServer_init();
     webServer_setDump(&g_dump);
 
-    if (display_init()) {
+    if (display_init())
         display_showBoot(webServer_ipOrStatus().c_str());
-    }
 
     reporter_error("BOOT_OK", "MifareBreaker ready — waiting for card");
 }
 
 void loop() {
+    // ── Guard: don't start a new scan while a web-triggered attack is running ──
+    if (webServer_isAttackRunning()) { delay(100); return; }
+
     ks_init(&g_dump);
 
+    // ── 1. Wait for card ──────────────────────────────────────────────────────
     if (!uid_detect(&g_dump)) { delay(200); return; }
     reporter_cardDetected(&g_dump);
     webServer_setDump(&g_dump);
@@ -48,28 +51,33 @@ void loop() {
 
     uint32_t t0 = millis();
 
+    // ── 2. Dictionary attack ──────────────────────────────────────────────────
     display_showProgress("dictionary", 0, 0, g_dump.totalSectors);
     dictAttack_run(&g_dump);
-    display_showProgress("dictionary", 0, ks_countCracked(&g_dump), g_dump.totalSectors);
 
+    // ── 3. Nested (only if at least one key known) ────────────────────────────
     if (ks_firstKnownSector(&g_dump) >= 0) {
         display_showProgress("nested", 0, ks_countCracked(&g_dump), g_dump.totalSectors);
         nestedAttack_run(&g_dump);
     }
 
+    // ── 4. Darkside for remaining unknown sectors ─────────────────────────────
     for (uint8_t i = 0; i < g_dump.totalSectors; i++) {
         if (!ks_isSectorKnown(&g_dump, i)) {
+            if (webServer_isAttackRunning()) break;   // web triggered something
             display_showProgress("darkside", i, ks_countCracked(&g_dump), g_dump.totalSectors);
             darksideAttack_runSector(&g_dump, i);
         }
     }
 
+    // ── 5. Summary + save ────────────────────────────────────────────────────
     uint32_t elapsed = millis() - t0;
     reporter_summary(&g_dump, elapsed);
     dump_save(&g_dump);
     display_showSummary(&g_dump, elapsed);
 
+    // ── 6. Wait for card removal ──────────────────────────────────────────────
     picc_halt();
-    while (picc_isPresent()) delay(150);
-    delay(500);
+    while (picc_isPresent() && !webServer_isAttackRunning()) delay(150);
+    delay(300);
 }
