@@ -1,11 +1,16 @@
 /*
-  Space Shooter
+  Space Shooter v2 (with power-ups)
   ESP32-WROOM-32 + TFT 1.8" ST7735 (128x160) + Joystick HW-504
 
   - Joystick: move the ship (left/right/up/down)
   - Auto-fire: always shooting
   - Button (SW): start / restart
-  - Drawing is done in an off-screen buffer (canvas), so there is no flicker.
+
+  Power-ups (dropped randomly by destroyed enemies):
+    [W] orange box  -> weapon upgrade (level 1..4)
+    [heart] red     -> +1 life (max 5)
+    [R] cyan box    -> rapid fire for 8 seconds
+  When you get hit, your weapon drops one level.
 */
 
 #include <Adafruit_GFX.h>
@@ -27,9 +32,18 @@
 #define INVERT_Y      false   // if up/down is reversed, set true
 #define DEADZONE      300     // joystick dead zone (0..2000)
 #define PLAYER_SPEED  3.5f    // ship speed (pixels per frame)
-#define FIRE_DELAY    170     // ms between shots
+#define FIRE_DELAY    170     // ms between shots (rapid fire = half)
 #define FRAME_MS      33      // ~30 FPS
 #define START_LIVES   3
+#define MAX_LIVES     5
+#define MAX_WEAPON    4
+#define RAPID_MS      8000UL  // rapid fire duration
+
+// Drop chances (percent) for each destroyed enemy
+#define DROP_WEAPON   10
+#define DROP_LIFE     5
+#define DROP_RAPID    6
+#define DROP_BONUS_STRONG 10  // extra chance when a strong enemy is destroyed
 
 // ===================== Screen =====================
 const int16_t SCR_W = 128;
@@ -52,35 +66,46 @@ GFXcanvas16 canvas(SCR_W, SCR_H);
 #define C_DGRAY   0x4208
 
 // ===================== Game objects =====================
-#define MAX_PB     10   // player bullets
+#define MAX_PB     40   // player bullets
 #define MAX_EN      7   // enemies
 #define MAX_EB      8   // enemy bullets
 #define MAX_BOOM    8   // explosions
 #define MAX_STARS  32
+#define MAX_ITEMS   4   // power-up items
 
 const int EW = 12;      // enemy width
 const int EH = 10;      // enemy height
+const int IS = 10;      // item size
 
-struct Bullet { int16_t x, y; bool on; };
+enum ItemType { IT_WEAPON = 0, IT_LIFE = 1, IT_RAPID = 2 };
+
+struct Bullet { int16_t x, y; int8_t dx; bool on; };
 struct Enemy  { float x, y, baseX, vy, phase, amp; uint8_t type; int8_t hp; bool on; };
 struct Star   { int16_t x, y; uint8_t spd; };
 struct Boom   { int16_t x, y; uint8_t t; bool on; };
+struct Item   { float x, y; uint8_t type; bool on; };
 
 Bullet pb[MAX_PB];
 Bullet eb[MAX_EB];
 Enemy  en[MAX_EN];
 Boom   booms[MAX_BOOM];
 Star   stars[MAX_STARS];
+Item   items[MAX_ITEMS];
 
 enum GameState { ST_TITLE, ST_PLAY, ST_OVER };
 GameState state = ST_TITLE;
 
 float px, py;                 // ship position (px = center x, py = top y)
 int   score = 0, best = 0, lives = START_LIVES, level = 1;
+int   weaponLevel = 1;
 int   invincible = 0;
+unsigned long rapidUntil = 0;
 unsigned long lastShot = 0, lastSpawn = 0, lastFrame = 0, overTime = 0;
 uint32_t frameCount = 0;
 bool  armed = false;          // input must be released before start/restart
+
+const char *popupMsg = "";
+int popupTimer = 0;
 
 int centerX = 2048, centerY = 2048;
 
@@ -131,6 +156,11 @@ void printCentered(const char *s, int y, uint8_t size, uint16_t col) {
 
 void pushFrame() {
   tft.drawRGBBitmap(0, 0, canvas.getBuffer(), SCR_W, SCR_H);
+}
+
+void showPopup(const char *msg) {
+  popupMsg = msg;
+  popupTimer = 30;
 }
 
 // ===================== Stars =====================
@@ -191,7 +221,7 @@ void drawBooms() {
   }
 }
 
-// ===================== Drawing ships =====================
+// ===================== Drawing ships & items =====================
 void drawPlayer(int x, int y) {
   canvas.fillTriangle(x, y, x - 6, y + 12, x + 6, y + 12, C_CYAN);   // body
   canvas.fillRect(x - 1, y + 4, 3, 6, C_WHITE);                      // cockpit
@@ -211,12 +241,29 @@ void drawEnemy(int x, int y, uint8_t type) {
   canvas.fillRect(x + 7, y + 2, 2, 2, C_WHITE);
 }
 
+void drawItem(int x, int y, uint8_t type) {
+  if (type == IT_LIFE) {
+    canvas.fillCircle(x + 3, y + 3, 3, C_RED);
+    canvas.fillCircle(x + 6, y + 3, 3, C_RED);
+    canvas.fillTriangle(x, y + 4, x + 9, y + 4, x + 4, y + 9, C_RED);
+  } else {
+    uint16_t c = (type == IT_WEAPON) ? C_ORANGE : C_CYAN;
+    canvas.fillRect(x, y, IS, IS, c);
+    canvas.drawRect(x, y, IS, IS, C_WHITE);
+    canvas.setTextSize(1);
+    canvas.setTextColor(C_BLACK);
+    canvas.setCursor(x + 2, y + 1);
+    canvas.print(type == IT_WEAPON ? 'W' : 'R');
+  }
+}
+
 // ===================== Bullets =====================
-void addPlayerBullet(int x, int y) {
+void addPlayerBullet(int x, int y, int dx) {
   for (int i = 0; i < MAX_PB; i++) {
     if (!pb[i].on) {
       pb[i].x = x;
       pb[i].y = y;
+      pb[i].dx = dx;
       pb[i].on = true;
       return;
     }
@@ -224,11 +271,27 @@ void addPlayerBullet(int x, int y) {
 }
 
 void firePlayer() {
-  if (level >= 3) {                       // double shot from level 3
-    addPlayerBullet((int)px - 6, (int)py + 4);
-    addPlayerBullet((int)px + 5, (int)py + 4);
-  } else {
-    addPlayerBullet((int)px - 1, (int)py);
+  int x = (int)px;
+  int y = (int)py;
+  switch (weaponLevel) {
+    case 1:                                   // single
+      addPlayerBullet(x - 1, y, 0);
+      break;
+    case 2:                                   // double
+      addPlayerBullet(x - 6, y + 4, 0);
+      addPlayerBullet(x + 5, y + 4, 0);
+      break;
+    case 3:                                   // triple spread
+      addPlayerBullet(x - 1, y, 0);
+      addPlayerBullet(x - 5, y + 3, -1);
+      addPlayerBullet(x + 3, y + 3, 1);
+      break;
+    default:                                  // double + spread
+      addPlayerBullet(x - 6, y + 4, 0);
+      addPlayerBullet(x + 5, y + 4, 0);
+      addPlayerBullet(x - 7, y + 5, -1);
+      addPlayerBullet(x + 6, y + 5, 1);
+      break;
   }
 }
 
@@ -237,9 +300,53 @@ void enemyShoot(Enemy &e) {
     if (!eb[i].on) {
       eb[i].x = (int)e.x + EW / 2 - 1;
       eb[i].y = (int)e.y + EH;
+      eb[i].dx = 0;
       eb[i].on = true;
       return;
     }
+  }
+}
+
+// ===================== Items =====================
+void spawnItem(int x, int y, uint8_t type) {
+  for (int i = 0; i < MAX_ITEMS; i++) {
+    if (!items[i].on) {
+      items[i].x = constrain(x, 0, SCR_W - IS);
+      items[i].y = y;
+      items[i].type = type;
+      items[i].on = true;
+      return;
+    }
+  }
+}
+
+void maybeDrop(Enemy &e) {
+  int bonus = (e.type == 1) ? DROP_BONUS_STRONG : 0;
+  int r = random(100);
+  int cx = (int)e.x + EW / 2 - IS / 2;
+  int cy = (int)e.y;
+  int t1 = DROP_WEAPON + bonus;
+  int t2 = t1 + DROP_LIFE;
+  int t3 = t2 + DROP_RAPID;
+  if (r < t1) {
+    spawnItem(cx, cy, IT_WEAPON);
+  } else if (r < t2) {
+    if (lives < MAX_LIVES) spawnItem(cx, cy, IT_LIFE);
+  } else if (r < t3) {
+    spawnItem(cx, cy, IT_RAPID);
+  }
+}
+
+void collectItem(uint8_t type) {
+  if (type == IT_WEAPON) {
+    if (weaponLevel < MAX_WEAPON) { weaponLevel++; showPopup("WEAPON UP!"); }
+    else { score += 50; showPopup("MAX +50"); }
+  } else if (type == IT_LIFE) {
+    if (lives < MAX_LIVES) { lives++; showPopup("+1 LIFE"); }
+    else { score += 50; showPopup("MAX +50"); }
+  } else {
+    rapidUntil = millis() + RAPID_MS;
+    showPopup("RAPID FIRE!");
   }
 }
 
@@ -269,16 +376,21 @@ void resetGame() {
   score = 0;
   lives = START_LIVES;
   level = 1;
+  weaponLevel = 1;
+  rapidUntil = 0;
   invincible = 0;
+  popupTimer = 0;
   lastShot = lastSpawn = millis();
-  for (int i = 0; i < MAX_PB; i++)   pb[i].on = false;
-  for (int i = 0; i < MAX_EB; i++)   eb[i].on = false;
-  for (int i = 0; i < MAX_EN; i++)   en[i].on = false;
-  for (int i = 0; i < MAX_BOOM; i++) booms[i].on = false;
+  for (int i = 0; i < MAX_PB; i++)    pb[i].on = false;
+  for (int i = 0; i < MAX_EB; i++)    eb[i].on = false;
+  for (int i = 0; i < MAX_EN; i++)    en[i].on = false;
+  for (int i = 0; i < MAX_BOOM; i++)  booms[i].on = false;
+  for (int i = 0; i < MAX_ITEMS; i++) items[i].on = false;
 }
 
 void hitPlayer() {
   lives--;
+  if (weaponLevel > 1) weaponLevel--;       // weapon is damaged
   spawnBoom((int)px, (int)py + 6);
   invincible = 60;
   if (lives <= 0) {
@@ -293,6 +405,8 @@ void hitPlayer() {
 
 void drawHUD() {
   canvas.setTextSize(1);
+
+  // row 1: score, level, lives
   canvas.setTextColor(C_WHITE);
   canvas.setCursor(2, 2);
   canvas.print(score);
@@ -303,6 +417,21 @@ void drawHUD() {
   for (int i = 0; i < lives; i++) {
     int x = SCR_W - 7 - i * 9;
     canvas.fillTriangle(x, 2, x - 3, 9, x + 3, 9, C_CYAN);
+  }
+
+  // row 2: weapon level + rapid fire timer
+  canvas.setTextColor(C_ORANGE);
+  canvas.setCursor(2, 12);
+  canvas.print("W");
+  for (int i = 0; i < weaponLevel; i++) {
+    canvas.fillRect(10 + i * 5, 13, 4, 6, C_ORANGE);
+  }
+  if (millis() < rapidUntil) {
+    canvas.setTextColor(C_CYAN);
+    canvas.setCursor(36, 12);
+    canvas.print("R");
+    int w = (int)((rapidUntil - millis()) * 20UL / RAPID_MS);
+    canvas.fillRect(44, 13, w, 6, C_CYAN);
   }
 }
 
@@ -316,7 +445,8 @@ void updatePlay() {
   py = constrain(py, 70.0f, (float)(SCR_H - 18));
 
   // ---- auto fire ----
-  if (millis() - lastShot >= FIRE_DELAY) {
+  unsigned long fd = (millis() < rapidUntil) ? (FIRE_DELAY / 2) : FIRE_DELAY;
+  if (millis() - lastShot >= fd) {
     lastShot = millis();
     firePlayer();
   }
@@ -335,7 +465,8 @@ void updatePlay() {
   for (int i = 0; i < MAX_PB; i++) {
     if (!pb[i].on) continue;
     pb[i].y -= 6;
-    if (pb[i].y < -6) pb[i].on = false;
+    pb[i].x += pb[i].dx;
+    if (pb[i].y < -6 || pb[i].x < -3 || pb[i].x > SCR_W + 1) pb[i].on = false;
   }
 
   // ---- enemies ----
@@ -362,6 +493,7 @@ void updatePlay() {
           en[e].on = false;
           spawnBoom((int)en[e].x + EW / 2, (int)en[e].y + EH / 2);
           score += (en[e].type == 1) ? 20 : 10;
+          maybeDrop(en[e]);
         }
         break;
       }
@@ -393,13 +525,28 @@ void updatePlay() {
     }
   }
 
+  // ---- power-up items ----
+  for (int i = 0; i < MAX_ITEMS; i++) {
+    if (!items[i].on) continue;
+    items[i].y += 1.3f;
+    if (items[i].y > SCR_H) { items[i].on = false; continue; }
+    if (hit((int)px - 6, (int)py, 13, 14, (int)items[i].x, (int)items[i].y, IS, IS)) {
+      items[i].on = false;
+      collectItem(items[i].type);
+    }
+  }
+
   if (invincible > 0) invincible--;
+  if (popupTimer > 0) popupTimer--;
   updateBooms();
 }
 
 void drawPlay() {
   canvas.fillScreen(C_BLACK);
   drawStars();
+
+  for (int i = 0; i < MAX_ITEMS; i++)
+    if (items[i].on) drawItem((int)items[i].x, (int)items[i].y, items[i].type);
 
   for (int i = 0; i < MAX_EN; i++)
     if (en[i].on) drawEnemy((int)en[i].x, (int)en[i].y, en[i].type);
@@ -415,6 +562,8 @@ void drawPlay() {
 
   drawBooms();
   drawHUD();
+
+  if (popupTimer > 0) printCentered(popupMsg, 32, 1, C_YELLOW);
 }
 
 // ===================== Screens =====================
@@ -424,12 +573,15 @@ void doTitle() {
   drawStars();
   printCentered("SPACE", 22, 2, C_CYAN);
   printCentered("SHOOTER", 42, 2, C_YELLOW);
-  drawPlayer(SCR_W / 2, 85);
-  if ((frameCount / 15) % 2 == 0) printCentered("PRESS BUTTON", 130, 1, C_WHITE);
+  drawPlayer(SCR_W / 2, 80);
+  drawItem(34, 108, IT_WEAPON);
+  drawItem(59, 108, IT_LIFE);
+  drawItem(84, 108, IT_RAPID);
+  if ((frameCount / 15) % 2 == 0) printCentered("PRESS BUTTON", 132, 1, C_WHITE);
   if (best > 0) {
     char buf[24];
     snprintf(buf, sizeof(buf), "BEST: %d", best);
-    printCentered(buf, 145, 1, C_GRAY);
+    printCentered(buf, 146, 1, C_GRAY);
   }
 
   bool a = actionPressed();
